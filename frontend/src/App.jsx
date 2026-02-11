@@ -3,9 +3,9 @@ import Navbar from './components/Navbar';
 import MusicUploader from './components/Musicuploader';
 import ArtistProfile from './components/ArtistProfile';
 import UserProfile from './components/UserProfile';
-
+import HomePage from './components/HomePage';
 function App() {
-  const [currentView, setCurrentView] = useState('user'); // 'user', 'artist', 'upload'
+  const [currentView, setCurrentView] = useState(''); // 'user', 'artist', 'upload'
 
   const renderView = () => {
     switch (currentView) {
@@ -15,8 +15,9 @@ function App() {
         return <ArtistProfile />;
       case 'upload':
         return <MusicUploader />;
+    
       default:
-        return <UserProfile />;
+        return <HomePage />;
     }
   };
 

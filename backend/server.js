@@ -69,7 +69,7 @@ const trackSchema = new mongoose.Schema({
   status: {
     type: String,
     enum: ['processing', 'completed', 'failed'],
-    default: 'processing'
+    default: 'completed' // Changed from 'processing' to 'completed'
   },
   uploadedAt: {
     type: Date,
@@ -138,6 +138,54 @@ const upload = multer({
   }
 });
 
+// ============================================
+// ROUTES - ORDER MATTERS!
+// ============================================
+
+// Health check endpoint - FIRST
+app.get('/health', (req, res) => {
+  res.status(200).json({
+    status: 'ok',
+    message: 'Music upload server is running',
+    mongodb: mongoose.connection.readyState === 1 ? 'connected' : 'disconnected',
+    timestamp: new Date().toISOString()
+  });
+});
+
+// Get all audio files for homepage - IMPORTANT: This route must come BEFORE /api/tracks/:id
+app.get('/api/songs', async (req, res) => {
+  try {
+    console.log('📡 GET /api/songs - Fetching all songs...');
+    
+    const tracks = await Track.find()
+      .sort({ uploadedAt: -1 })
+      .select('title artist audioFile coverFile album genre status');
+    
+    console.log(`✅ Found ${tracks.length} tracks in database`);
+    
+    const songs = tracks.map(track => ({
+      id: track._id,
+      name: `${track.artist} - ${track.title}`,
+      title: track.title,
+      artist: track.artist,
+      album: track.album || '',
+      genre: track.genre || '',
+      status: track.status,
+      url: `http://localhost:${PORT}${track.audioFile.url}`,
+      cover: track.coverFile ? `http://localhost:${PORT}${track.coverFile.url}` : null
+    }));
+
+    res.status(200).json(songs);
+  } catch (error) {
+    console.error('❌ Error fetching songs:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Error fetching songs',
+      error: error.message
+    });
+  }
+});
+
 // Upload endpoint
 app.post('/api/upload', upload.fields([
   { name: 'audio', maxCount: 1 },
@@ -196,14 +244,13 @@ app.post('/api/upload', upload.fields([
         path: coverFile.path,
         url: `/uploads/covers/${coverFile.filename}`
       } : null,
-      status: 'processing'
+      status: 'completed' // Auto-complete so it shows in homepage
     };
 
     // Save to MongoDB
     const track = new Track(trackData);
     await track.save();
 
-    // Simulate processing (in production, trigger actual distribution logic)
     console.log('✅ Track uploaded:', trackData.title, 'by', trackData.artist);
     console.log('📀 Track ID:', track._id);
     console.log('🎵 Audio file:', audioFile.filename);
@@ -269,7 +316,7 @@ app.get('/api/tracks', async (req, res) => {
   }
 });
 
-// Get specific track by ID
+// Get specific track by ID - MUST come after /api/songs
 app.get('/api/tracks/:id', async (req, res) => {
   try {
     const track = await Track.findById(req.params.id);
@@ -372,21 +419,11 @@ app.delete('/api/tracks/:id', async (req, res) => {
   }
 });
 
-// Serve uploaded files
+// Serve uploaded files - These should be near the end
 app.use('/uploads/audio', express.static(audioDir));
 app.use('/uploads/covers', express.static(coverDir));
 
-// Health check endpoint
-app.get('/health', (req, res) => {
-  res.status(200).json({
-    status: 'ok',
-    message: 'Music upload server is running',
-    mongodb: mongoose.connection.readyState === 1 ? 'connected' : 'disconnected',
-    timestamp: new Date().toISOString()
-  });
-});
-
-// Error handling middleware
+// Error handling middleware - MUST be last
 app.use((error, req, res, next) => {
   if (error instanceof multer.MulterError) {
     if (error.code === 'LIMIT_FILE_SIZE') {
@@ -420,8 +457,15 @@ mongoose.connection.once('open', () => {
     console.log(`🎧 Audio files: ${audioDir}`);
     console.log(`🎨 Cover art: ${coverDir}`);
     console.log(`🗄️  MongoDB: ${MONGODB_URI}`);
+    console.log('\n📋 Available endpoints:');
+    console.log('   GET  /health');
+    console.log('   GET  /api/songs          ← Homepage endpoint');
+    console.log('   POST /api/upload');
+    console.log('   GET  /api/tracks');
+    console.log('   GET  /api/tracks/:id');
+    console.log('   PATCH /api/tracks/:id/status');
+    console.log('   DELETE /api/tracks/:id');
   });
 });
-
 
 module.exports = app;
