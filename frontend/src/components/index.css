@@ -1,0 +1,87 @@
+/* Dark theme helpers */
+.bg-darker { background:#0f172a; }
+.bg-card { background:#1f2937; }
+.bg-card-hover:hover { background:#2b3648; }
+
+.text-muted-light { color:#9ca3af; }
+
+.hero-overlay{
+  background: linear-gradient(to bottom, rgba(0,0,0,.55), rgba(0,0,0,.8));
+}
+
+.play-btn{
+  width:56px;
+  height:56px;
+  border-radius:50%;
+  background:#6366f1;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  transition:.25s;
+}
+.play-btn:hover{
+  transform:scale(1.07);
+  background:#5855eb;
+}
+
+.album-card img{
+  transition:.3s;
+}
+.album-card:hover img{
+  transform:scale(1.05);
+}
+/* profile header */
+.profile-cover{
+  height:260px;
+  background-size:cover;
+  background-position:center;
+  position:relative;
+}
+.profile-cover::after{
+  content:"";
+  position:absolute;
+  inset:0;
+  background:linear-gradient(to bottom, rgba(0,0,0,.2), rgba(0,0,0,.85));
+}
+
+/* avatar */
+.profile-avatar{
+  width:150px;
+  height:150px;
+  object-fit:cover;
+  border-radius:50%;
+  border:5px solid #0b0f19;
+  box-shadow:0 10px 30px rgba(0,0,0,.6);
+}
+
+/* playlist card */
+.playlist-card{
+  background:#1f2937;
+  border-radius:12px;
+  padding:16px;
+  transition:.25s;
+  cursor:pointer;
+}
+.playlist-card:hover{
+  background:#2b3648;
+}
+
+/* hover track row */
+.track-row{
+  background:#1f2937;
+  border-radius:10px;
+  padding:12px;
+  transition:.2s;
+}
+.track-row:hover{
+  background:#2b3648;
+}
+
+.artist-avatar{
+  border-radius:50%;
+  border:4px solid #1f2937;
+  transition:.25s;
+}
+.artist-avatar:hover{
+  border-color:#a855f7;
+}

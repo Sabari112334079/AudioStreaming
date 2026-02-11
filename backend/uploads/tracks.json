@@ -1,0 +1,95 @@
+[
+  {
+    "id": "1770704547633",
+    "title": "Tharai Mel",
+    "artist": "MS ViswaNathan",
+    "album": "Padagotti",
+    "genre": "country",
+    "releaseDate": "1968-11-30",
+    "explicit": false,
+    "platforms": {
+      "spotify": true,
+      "amazonMusic": false,
+      "appleMusic": false,
+      "youtubeMusic": false
+    },
+    "audioFile": {
+      "filename": "audio-1770704547560-130328977.mp3",
+      "originalName": "Tharai_Mel_-_TM_Soundararajan.mp3",
+      "size": 4023302,
+      "mimetype": "audio/mpeg",
+      "path": "E:\\112334079\\Spotify\\backend\\uploads\\audio\\audio-1770704547560-130328977.mp3"
+    },
+    "coverFile": {
+      "filename": "cover-1770704547626-925068586.jpg",
+      "originalName": "82928a656b8982475d36ec3e104db18f.jpg",
+      "size": 89417,
+      "mimetype": "image/jpeg",
+      "path": "E:\\112334079\\Spotify\\backend\\uploads\\covers\\cover-1770704547626-925068586.jpg"
+    },
+    "uploadedAt": "2026-02-10T06:22:27.633Z",
+    "status": "processing"
+  },
+  {
+    "id": "1770704549972",
+    "title": "Tharai Mel",
+    "artist": "MS ViswaNathan",
+    "album": "Padagotti",
+    "genre": "country",
+    "releaseDate": "1968-11-30",
+    "explicit": false,
+    "platforms": {
+      "spotify": true,
+      "amazonMusic": false,
+      "appleMusic": false,
+      "youtubeMusic": false
+    },
+    "audioFile": {
+      "filename": "audio-1770704549948-623222628.mp3",
+      "originalName": "Tharai_Mel_-_TM_Soundararajan.mp3",
+      "size": 4023302,
+      "mimetype": "audio/mpeg",
+      "path": "E:\\112334079\\Spotify\\backend\\uploads\\audio\\audio-1770704549948-623222628.mp3"
+    },
+    "coverFile": {
+      "filename": "cover-1770704549969-314593332.jpg",
+      "originalName": "82928a656b8982475d36ec3e104db18f.jpg",
+      "size": 89417,
+      "mimetype": "image/jpeg",
+      "path": "E:\\112334079\\Spotify\\backend\\uploads\\covers\\cover-1770704549969-314593332.jpg"
+    },
+    "uploadedAt": "2026-02-10T06:22:29.972Z",
+    "status": "processing"
+  },
+  {
+    "id": "1770785044758",
+    "title": "Tharai mel",
+    "artist": "MS Viswanathan",
+    "album": "Padagotti",
+    "genre": "country",
+    "releaseDate": "1968-07-02",
+    "explicit": false,
+    "platforms": {
+      "spotify": true,
+      "amazonMusic": true,
+      "appleMusic": false,
+      "youtubeMusic": false
+    },
+    "audioFile": {
+      "filename": "audio-1770785044692-860106385.mp3",
+      "originalName": "Tharai_Mel_-_TM_Soundararajan.mp3",
+      "size": 4023302,
+      "mimetype": "audio/mpeg",
+      "path": "E:\\112334079\\Spotify\\backend\\uploads\\audio\\audio-1770785044692-860106385.mp3"
+    },
+    "coverFile": {
+      "filename": "cover-1770785044753-904556889.jfif",
+      "originalName": "3144a0c0-c2a4-45b5-9832-14f602a7da77.jfif",
+      "size": 113122,
+      "mimetype": "image/jpeg",
+      "path": "E:\\112334079\\Spotify\\backend\\uploads\\covers\\cover-1770785044753-904556889.jfif"
+    },
+    "uploadedAt": "2026-02-11T04:44:04.758Z",
+    "status": "processing"
+  }
+]
