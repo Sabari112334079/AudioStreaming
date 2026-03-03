@@ -2,46 +2,82 @@ const express = require("express");
 const mongoose = require("mongoose");
 const cors = require("cors");
 const session = require("express-session");
-const routes = require("./Routes");
+const MongoStore = require("connect-mongo"); // ✅ ADD THIS
 const path = require("path");
+const fs = require("fs");
+const routes = require("./Routes");
 
 const app = express();
 
-// CORS with credentials
+const MONGO_URI = "mongodb://localhost:27017/twintones";
+
+// ✅ 1. Uploads directory
+const uploadDir = path.join(__dirname, "uploads");
+if (!fs.existsSync(uploadDir)) {
+  fs.mkdirSync(uploadDir, { recursive: true });
+  console.log("✅ Created uploads directory");
+}
+
+// ✅ 2. CORS
 app.use(cors({
-  origin: "http://localhost:5173", // Your React dev server
-  credentials: true
+  origin: "http://localhost:5173",
+  credentials: true,
 }));
 
-// Session middleware - MUST come before routes
-app.use(session({
-  secret: "your-secret-key-change-this-in-production",
-  resave: false,
-  saveUninitialized: false,
-  cookie: {
-    secure: false, // Set to true if using HTTPS
-    httpOnly: true,
-    maxAge: 24 * 60 * 60 * 1000 // 24 hours
-  }
-}));
-
-// Body parser
+// ✅ 3. Body parsers
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
-// Serve static files (uploads)
+// ✅ 4. MongoDB — connect BEFORE session so MongoStore can use it
+mongoose.connect(MONGO_URI)
+  .then(() => console.log("✅ MongoDB connected"))
+  .catch((err) => console.error("❌ MongoDB error:", err));
+
+// ✅ 5. Session with MongoStore — survives server restarts + page refreshes
+app.use(session({
+  secret: "your-secret-key-change-in-production",
+  resave: false,
+  saveUninitialized: false,
+  store: MongoStore.create({
+    mongoUrl: MONGO_URI,        // ✅ persists sessions in MongoDB
+    ttl: 7 * 24 * 60 * 60,     // 7 days in seconds
+    autoRemove: "native",       // auto-delete expired sessions
+    collectionName: "sessions", // stored in 'sessions' collection
+  }),
+  cookie: {
+    secure: false,
+    httpOnly: true,
+    sameSite: "lax",
+    maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days in ms
+  },
+}));
+
+// ✅ 6. Static uploads
 app.use("/uploads", express.static(path.join(__dirname, "uploads")));
 
-// Routes
+// ✅ 7. Health check
+app.get("/health", (req, res) => {
+  res.json({
+    status: "OK",
+    timestamp: new Date(),
+    mongodb: mongoose.connection.readyState === 1 ? "connected" : "disconnected",
+  });
+});
+
+// ✅ 8. Routes
 app.use("/", routes);
 
-// MongoDB connection
-mongoose.connect("mongodb://localhost:27017/sabariDB")
-  .then(() => console.log("✅ MongoDB connected"))
-  .catch(err => console.error("❌ MongoDB error:", err));
+// ✅ 9. Global error handler
+app.use((err, req, res, next) => {
+  console.error("❌ Server Error:", err.message);
+  if (err.code === "LIMIT_FILE_SIZE")
+    return res.status(400).json({ message: "File too large. Max size is 50MB." });
+  if (err.message?.includes("audio"))
+    return res.status(400).json({ message: err.message });
+  res.status(500).json({ message: err.message || "Internal server error" });
+});
 
-// Start server
-const PORT = 5000;
+const PORT = process.env.PORT || 5000;
 app.listen(PORT, () => {
   console.log(`🚀 Server running on http://localhost:${PORT}`);
 });

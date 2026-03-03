@@ -4,21 +4,38 @@ const HomePage = () => {
   const [songs, setSongs] = useState([]);
   const [loading, setLoading] = useState(true);
   const [playingSongId, setPlayingSongId] = useState(null);
+  const [filter, setFilter] = useState({ genre: "all", search: "" });
+  const [genres, setGenres] = useState([]);
 
   useEffect(() => {
-    const fetchSongs = async () => {
-      try {
-        const res = await fetch("http://localhost:5000/songs");
-        const data = await res.json();
-        setSongs(data.songs || []);
-      } catch (err) {
-        console.error("Error fetching songs:", err);
-      } finally {
-        setLoading(false);
-      }
-    };
     fetchSongs();
-  }, []);
+  }, [filter]);
+
+  const fetchSongs = async () => {
+  try {
+    setLoading(true);
+    const queryParams = new URLSearchParams();
+    if (filter.genre !== "all") queryParams.append("genre", filter.genre);
+    if (filter.search) queryParams.append("search", filter.search);
+    
+    const res = await fetch(`http://localhost:5000/songs?${queryParams}`);
+    const data = await res.json();
+    
+    // ✅ Fixed: Check if data.songs exists and is an array
+    const songsArray = Array.isArray(data.songs) ? data.songs : [];
+    setSongs(songsArray);
+    
+    // Extract unique genres safely
+    const uniqueGenres = [...new Set(songsArray.map(s => s.genre))].filter(Boolean);
+    setGenres(["all", ...uniqueGenres]);
+  } catch (err) {
+    console.error("Error fetching songs:", err);
+    setSongs([]); // ✅ Set empty array on error
+    setGenres(["all"]);
+  } finally {
+    setLoading(false);
+  }
+};
 
   const handlePlay = (songId) => {
     setPlayingSongId(songId);
@@ -28,21 +45,33 @@ const HomePage = () => {
     setPlayingSongId(null);
   };
 
+  const handleLike = async (trackId) => {
+    try {
+      const res = await fetch("http://localhost:5000/tracks/like", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({ trackId })
+      });
+      
+      if (res.ok) {
+        // Update local state
+        setSongs(songs.map(song => 
+          song._id === trackId 
+            ? { ...song, likes: (song.likes || 0) + 1 }
+            : song
+        ));
+      }
+    } catch (err) {
+      console.error("Error liking track:", err);
+    }
+  };
+
   if (loading) {
     return (
       <div style={styles.loadingContainer}>
         <div style={styles.spinner}></div>
         <p style={styles.loadingText}>Loading your music...</p>
-      </div>
-    );
-  }
-
-  if (!songs.length) {
-    return (
-      <div style={styles.emptyContainer}>
-        <div style={styles.emptyIcon}>🎵</div>
-        <h2 style={styles.emptyTitle}>No Tracks Yet</h2>
-        <p style={styles.emptyText}>Be the first to share some music!</p>
       </div>
     );
   }
@@ -58,66 +87,161 @@ const HomePage = () => {
         <p style={styles.heroSubtitle}>
           Explore {songs.length} amazing {songs.length === 1 ? 'track' : 'tracks'} from our community
         </p>
+
+        {/* Filters */}
+        <div style={styles.filterBar}>
+          {/* Search */}
+          <input
+            type="text"
+            placeholder="🔍 Search tracks, artists..."
+            style={styles.searchInput}
+            value={filter.search}
+            onChange={(e) => setFilter({ ...filter, search: e.target.value })}
+          />
+
+          {/* Genre Filter */}
+          <select
+            style={styles.genreSelect}
+            value={filter.genre}
+            onChange={(e) => setFilter({ ...filter, genre: e.target.value })}
+          >
+            {genres.map(genre => (
+              <option key={genre} value={genre}>
+                {genre === "all" ? "All Genres" : genre}
+              </option>
+            ))}
+          </select>
+        </div>
       </div>
+
+      {/* Empty State */}
+      {!songs.length && !loading && (
+        <div style={styles.emptyState}>
+          <div style={styles.emptyIcon}>🎵</div>
+          <h2 style={styles.emptyTitle}>No Tracks Found</h2>
+          <p style={styles.emptyText}>
+            {filter.search || filter.genre !== "all" 
+              ? "Try adjusting your filters" 
+              : "Be the first to share some music!"}
+          </p>
+        </div>
+      )}
 
       {/* Songs Grid */}
-      <div style={styles.grid}>
-        {songs.map((song, index) => (
-          <div 
-            key={song._id} 
-            style={{
-              ...styles.card,
-              animationDelay: `${index * 0.1}s`
-            }}
-          >
-            {/* Album Art Placeholder */}
-            <div style={styles.albumArt}>
-              <div style={styles.albumIcon}>
-                {playingSongId === song._id ? "🎵" : "🎼"}
-              </div>
-              {playingSongId === song._id && (
-                <div style={styles.playingIndicator}>
-                  <span style={styles.bar}></span>
-                  <span style={styles.bar}></span>
-                  <span style={styles.bar}></span>
-                </div>
-              )}
-            </div>
-
-            {/* Song Info */}
-            <div style={styles.songInfo}>
-              <h3 style={styles.songTitle}>{song.title}</h3>
-              {song.description && (
-                <p style={styles.songDescription}>{song.description}</p>
-              )}
-              <p style={styles.uploadDate}>
-                <span style={styles.dateIcon}>📅</span>
-                {new Date(song.uploadedAt).toLocaleDateString('en-US', {
-                  month: 'short',
-                  day: 'numeric',
-                  year: 'numeric'
-                })}
-              </p>
-            </div>
-
-            {/* Audio Player */}
-            <div style={styles.playerWrapper}>
-              <audio 
-                controls 
-                style={styles.audioPlayer}
-                onPlay={() => handlePlay(song._id)}
-                onPause={handlePause}
+      {songs.length > 0 && (
+        <div style={styles.grid}>
+          {songs.map((song, index) => (
+            <div 
+              key={song._id} 
+              style={{
+                ...styles.card,
+                animationDelay: `${index * 0.1}s`
+              }}
+            >
+              {/* Album Art */}
+              <div 
+                style={{
+                  ...styles.albumArt,
+                  backgroundImage: song.coverArt ? `url(${song.coverArt})` : 'none',
+                  backgroundSize: 'cover',
+                  backgroundPosition: 'center'
+                }}
               >
-                <source 
-                  src={`http://localhost:5000/uploads/${song.filename}`} 
-                  type="audio/mpeg" 
-                />
-                Your browser does not support the audio element.
-              </audio>
+                {!song.coverArt && (
+                  <div style={styles.albumIcon}>
+                    {playingSongId === song._id ? "🎵" : "🎼"}
+                  </div>
+                )}
+                {playingSongId === song._id && (
+                  <div style={styles.playingIndicator}>
+                    <span style={styles.bar}></span>
+                    <span style={styles.bar}></span>
+                    <span style={styles.bar}></span>
+                  </div>
+                )}
+              </div>
+
+              {/* Song Info */}
+              <div style={styles.songInfo}>
+                <div style={styles.songHeader}>
+                  <h3 style={styles.songTitle}>{song.title}</h3>
+                  {song.genre && (
+                    <span style={styles.genreBadge}>{song.genre}</span>
+                  )}
+                </div>
+
+                <p style={styles.artistName}>
+                  <span style={styles.artistIcon}>🎤</span>
+                  {song.artist || "Unknown Artist"}
+                </p>
+
+                {song.description && (
+                  <p style={styles.songDescription}>{song.description}</p>
+                )}
+
+                {/* Stats Row */}
+                <div style={styles.statsRow}>
+                  <span style={styles.stat}>
+                    <span style={styles.statIcon}>▶️</span>
+                    {song.plays || 0} plays
+                  </span>
+                  <span style={styles.stat}>
+                    <span style={styles.statIcon}>❤️</span>
+                    {song.likes || 0} likes
+                  </span>
+                </div>
+
+                {/* Tags */}
+                {song.tags && song.tags.length > 0 && (
+                  <div style={styles.tagsContainer}>
+                    {song.tags.slice(0, 3).map((tag, i) => (
+                      <span key={i} style={styles.tag}>#{tag}</span>
+                    ))}
+                  </div>
+                )}
+
+                <p style={styles.uploadDate}>
+                  <span style={styles.dateIcon}>📅</span>
+                  {new Date(song.uploadedAt).toLocaleDateString('en-US', {
+                    month: 'short',
+                    day: 'numeric',
+                    year: 'numeric'
+                  })}
+                </p>
+              </div>
+
+              {/* Actions */}
+              <div style={styles.actionsBar}>
+                <button 
+                  style={styles.likeButton}
+                  onClick={() => handleLike(song._id)}
+                >
+                  ❤️ Like
+                </button>
+                <span style={styles.fileSize}>
+                  {song.fileSize ? `${(song.fileSize / (1024 * 1024)).toFixed(1)} MB` : ''}
+                </span>
+              </div>
+
+              {/* Audio Player */}
+              <div style={styles.playerWrapper}>
+                <audio 
+                  controls 
+                  style={styles.audioPlayer}
+                  onPlay={() => handlePlay(song._id)}
+                  onPause={handlePause}
+                >
+                  <source 
+                    src={`http://localhost:5000/uploads/${song.filename}`} 
+                    type="audio/mpeg" 
+                  />
+                  Your browser does not support the audio element.
+                </audio>
+              </div>
             </div>
-          </div>
-        ))}
-      </div>
+          ))}
+        </div>
+      )}
     </div>
   );
 };
@@ -133,7 +257,7 @@ const styles = {
   hero: {
     background: "rgba(255, 255, 255, 0.1)",
     backdropFilter: "blur(10px)",
-    padding: "60px 20px",
+    padding: "60px 20px 40px 20px",
     textAlign: "center",
     borderBottom: "1px solid rgba(255, 255, 255, 0.2)",
   },
@@ -156,8 +280,39 @@ const styles = {
   heroSubtitle: {
     fontSize: "18px",
     color: "rgba(255, 255, 255, 0.9)",
-    margin: 0,
+    margin: "0 0 30px 0",
     fontWeight: "400",
+  },
+
+  // Filter Bar
+  filterBar: {
+    display: "flex",
+    gap: "15px",
+    maxWidth: "600px",
+    margin: "0 auto",
+    flexWrap: "wrap",
+    justifyContent: "center",
+  },
+  searchInput: {
+    flex: "1",
+    minWidth: "250px",
+    padding: "12px 20px",
+    borderRadius: "25px",
+    border: "2px solid rgba(255, 255, 255, 0.3)",
+    background: "rgba(255, 255, 255, 0.9)",
+    fontSize: "14px",
+    outline: "none",
+    transition: "all 0.3s",
+  },
+  genreSelect: {
+    padding: "12px 20px",
+    borderRadius: "25px",
+    border: "2px solid rgba(255, 255, 255, 0.3)",
+    background: "rgba(255, 255, 255, 0.9)",
+    fontSize: "14px",
+    outline: "none",
+    cursor: "pointer",
+    minWidth: "150px",
   },
 
   // Grid
@@ -180,11 +335,6 @@ const styles = {
     overflow: "hidden",
     animation: "fadeInUp 0.6s ease forwards",
     opacity: 0,
-    cursor: "pointer",
-    ":hover": {
-      transform: "translateY(-10px)",
-      boxShadow: "0 15px 40px rgba(0, 0, 0, 0.3)",
-    }
   },
 
   // Album Art
@@ -223,23 +373,92 @@ const styles = {
   songInfo: {
     padding: "20px",
   },
+  songHeader: {
+    display: "flex",
+    justifyContent: "space-between",
+    alignItems: "flex-start",
+    gap: "10px",
+    marginBottom: "8px",
+  },
   songTitle: {
-    fontSize: "22px",
+    fontSize: "20px",
     fontWeight: "700",
     color: "#1f2937",
-    margin: "0 0 10px 0",
+    margin: "0",
+    flex: "1",
     overflow: "hidden",
     textOverflow: "ellipsis",
     whiteSpace: "nowrap",
   },
-  songDescription: {
+  genreBadge: {
+    background: "linear-gradient(135deg, #667eea 0%, #764ba2 100%)",
+    color: "white",
+    padding: "4px 12px",
+    borderRadius: "12px",
+    fontSize: "11px",
+    fontWeight: "600",
+    textTransform: "uppercase",
+    letterSpacing: "0.5px",
+    flexShrink: 0,
+  },
+  artistName: {
     fontSize: "14px",
+    color: "#6b7280",
+    margin: "0 0 8px 0",
+    display: "flex",
+    alignItems: "center",
+    gap: "6px",
+    fontWeight: "500",
+  },
+  artistIcon: {
+    fontSize: "14px",
+  },
+  songDescription: {
+    fontSize: "13px",
     color: "#6b7280",
     margin: "0 0 12px 0",
     lineHeight: "1.5",
+    display: "-webkit-box",
+    WebkitLineClamp: "2",
+    WebkitBoxOrient: "vertical",
+    overflow: "hidden",
   },
+
+  // Stats Row
+  statsRow: {
+    display: "flex",
+    gap: "15px",
+    marginBottom: "10px",
+  },
+  stat: {
+    fontSize: "12px",
+    color: "#9ca3af",
+    display: "flex",
+    alignItems: "center",
+    gap: "4px",
+  },
+  statIcon: {
+    fontSize: "12px",
+  },
+
+  // Tags
+  tagsContainer: {
+    display: "flex",
+    gap: "6px",
+    flexWrap: "wrap",
+    marginBottom: "10px",
+  },
+  tag: {
+    background: "#f3f4f6",
+    color: "#6b7280",
+    padding: "3px 10px",
+    borderRadius: "10px",
+    fontSize: "11px",
+    fontWeight: "500",
+  },
+
   uploadDate: {
-    fontSize: "13px",
+    fontSize: "12px",
     color: "#9ca3af",
     display: "flex",
     alignItems: "center",
@@ -247,7 +466,30 @@ const styles = {
     margin: 0,
   },
   dateIcon: {
-    fontSize: "14px",
+    fontSize: "12px",
+  },
+
+  // Actions Bar
+  actionsBar: {
+    padding: "0 20px 15px 20px",
+    display: "flex",
+    justifyContent: "space-between",
+    alignItems: "center",
+  },
+  likeButton: {
+    background: "linear-gradient(135deg, #f093fb 0%, #f5576c 100%)",
+    color: "white",
+    border: "none",
+    padding: "8px 20px",
+    borderRadius: "20px",
+    fontSize: "13px",
+    fontWeight: "600",
+    cursor: "pointer",
+    transition: "transform 0.2s, box-shadow 0.2s",
+  },
+  fileSize: {
+    fontSize: "11px",
+    color: "#9ca3af",
   },
 
   // Player
@@ -286,14 +528,13 @@ const styles = {
   },
 
   // Empty State
-  emptyContainer: {
+  emptyState: {
     display: "flex",
     flexDirection: "column",
     alignItems: "center",
     justifyContent: "center",
-    minHeight: "100vh",
-    background: "linear-gradient(135deg, #667eea 0%, #764ba2 100%)",
-    padding: "20px",
+    minHeight: "60vh",
+    padding: "40px 20px",
   },
   emptyIcon: {
     fontSize: "120px",
@@ -354,6 +595,17 @@ styleSheet.textContent = `
   div[style*="card"]:hover {
     transform: translateY(-10px) !important;
     box-shadow: 0 15px 40px rgba(0, 0, 0, 0.3) !important;
+  }
+
+  button[style*="likeButton"]:hover {
+    transform: scale(1.05);
+    box-shadow: 0 5px 15px rgba(245, 87, 108, 0.4);
+  }
+
+  input[style*="searchInput"]:focus,
+  select[style*="genreSelect"]:focus {
+    border-color: rgba(255, 255, 255, 0.8);
+    background: white;
   }
 `;
 document.head.appendChild(styleSheet);

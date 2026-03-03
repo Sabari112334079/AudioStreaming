@@ -41,8 +41,12 @@ function ListenCard({ msg, isMine, onAccept }) {
         <span className="lc-label">Listen Together Invite</span>
       </div>
       <p className="lc-track">{msg.track?.title || "Unknown Track"}</p>
-      {!isMine && (
+      <p className="lc-artist">{msg.track?.artist || "Unknown Artist"}</p>
+      {!isMine && !msg.isAccepted && (
         <button className="lc-accept" onClick={onAccept}>▶ Accept & Listen</button>
+      )}
+      {!isMine && msg.isAccepted && (
+        <span className="lc-sent">✓ Accepted</span>
       )}
       {isMine && <span className="lc-sent">Invite sent ✓</span>}
       <span className="bubble-time">{timeAgo(msg.createdAt)}</span>
@@ -50,181 +54,259 @@ function ListenCard({ msg, isMine, onAccept }) {
   );
 }
 
-export default function Messages({ currentUserEmail }) {
-  const [allUsers, setAllUsers]           = useState([]);
+export default function Messages({ currentUserEmail, currentUser }) {
+  const [allUsers, setAllUsers] = useState([]);
   const [filteredUsers, setFilteredUsers] = useState([]);
-  const [searchQuery, setSearchQuery]     = useState("");
-  const [selectedUser, setSelectedUser]   = useState(null);
-  const [messages, setMessages]           = useState([]);
-  const [newMsg, setNewMsg]               = useState("");
-  const [tracks, setTracks]               = useState([]);
-  const [loadingMsgs, setLoadingMsgs]     = useState(false);
-  const [loadingUsers, setLoadingUsers]   = useState(true);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [selectedUser, setSelectedUser] = useState(null);
+  const [messages, setMessages] = useState([]);
+  const [newMsg, setNewMsg] = useState("");
+  const [tracks, setTracks] = useState([]);
+  const [loadingMsgs, setLoadingMsgs] = useState(false);
+  const [loadingUsers, setLoadingUsers] = useState(true);
 
   const [showListenModal, setShowListenModal] = useState(false);
-  const [listenInvite, setListenInvite]       = useState(null);
-  const [activeSession, setActiveSession]     = useState(null);
-  const [isPlaying, setIsPlaying]             = useState(false);
-  const [progress, setProgress]               = useState(0);
-  const [duration, setDuration]               = useState(0);
+  const [listenInvite, setListenInvite] = useState(null);
+  const [activeSession, setActiveSession] = useState(null);
+  const [isPlaying, setIsPlaying] = useState(false);
+  const [progress, setProgress] = useState(0);
+  const [duration, setDuration] = useState(0);
   const [selectedTrackId, setSelectedTrackId] = useState("");
 
-  const audioRef    = useRef(null);
-  const pollRef     = useRef(null);
-  const msgEndRef   = useRef(null);
-  const selectedRef = useRef(null); // ← fixes stale closure in interval
+  const audioRef = useRef(null);
+  const pollRef = useRef(null);
+  const msgEndRef = useRef(null);
+  const selectedRef = useRef(null);
 
-  // keep ref in sync with state
-  useEffect(() => { selectedRef.current = selectedUser; }, [selectedUser]);
+  // Keep ref in sync with state
+  useEffect(() => {
+    selectedRef.current = selectedUser;
+  }, [selectedUser]);
 
-useEffect(() => {
-  console.log('🔍 currentUserEmail changed:', currentUserEmail);
-  if (!currentUserEmail) {
-    console.log('⚠️ No currentUserEmail yet, skipping fetch');
-    return;
-  }
-  
-  console.log('✅ Fetching users and tracks...');
-  fetchUsers();
-  fetchTracks();
-  
-  pollRef.current = setInterval(() => {
-    if (selectedRef.current) fetchMessagesSilent(selectedRef.current);
-  }, 3000);
-  
-  return () => {
-    if (pollRef.current) clearInterval(pollRef.current);
-  };
-}, [currentUserEmail]);
+  // Initial fetch on mount
+  useEffect(() => {
+    if (!currentUserEmail) {
+      console.log("⚠️ No currentUserEmail, skipping fetch");
+      setLoadingUsers(false);
+      return;
+    }
 
-  // filter sidebar whenever search or users change
+    console.log("✅ Fetching users and tracks for:", currentUserEmail);
+    fetchUsers();
+    fetchTracks();
+
+    // Start polling for new messages
+    pollRef.current = setInterval(() => {
+      if (selectedRef.current) {
+        fetchMessagesSilent(selectedRef.current);
+      }
+    }, 3000);
+
+    return () => {
+      if (pollRef.current) clearInterval(pollRef.current);
+    };
+  }, [currentUserEmail]);
+
+  // Filter sidebar
   useEffect(() => {
     const q = searchQuery.toLowerCase();
     setFilteredUsers(
       allUsers.filter(
-        (u) => u.name?.toLowerCase().includes(q) || u.email?.toLowerCase().includes(q)
+        (u) =>
+          u.name?.toLowerCase().includes(q) ||
+          u.email?.toLowerCase().includes(q)
       )
     );
   }, [searchQuery, allUsers]);
 
-  useEffect(() => { if (selectedUser) fetchMessages(); }, [selectedUser]);
-  useEffect(() => { msgEndRef.current?.scrollIntoView({ behavior: "smooth" }); }, [messages]);
+  useEffect(() => {
+    if (selectedUser) fetchMessages();
+  }, [selectedUser]);
 
-  /* ─── fetchers ─── */
+  useEffect(() => {
+    msgEndRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, [messages]);
+
+  /* ─── Fetchers ─── */
   const fetchUsers = async () => {
     setLoadingUsers(true);
     try {
-      const res  = await fetch(`${BASE}/users?email=${encodeURIComponent(currentUserEmail)}`);
+      const res = await fetch(
+        `${BASE}/users?email=${encodeURIComponent(currentUserEmail)}`,
+        { credentials: "include" }
+      );
       const data = await res.json();
-      console.log("✅ Users:", data.users);
+      console.log("✅ Users fetched:", data.users?.length || 0);
       setAllUsers(data.users || []);
-    } catch (e) { console.error(e); }
-    finally { setLoadingUsers(false); }
+    } catch (e) {
+      console.error("❌ Error fetching users:", e);
+      setAllUsers([]);
+    } finally {
+      setLoadingUsers(false);
+    }
   };
 
   const fetchTracks = async () => {
     try {
-      const res  = await fetch(`${BASE}/songs`);
+      const res = await fetch(`${BASE}/songs`);
       const data = await res.json();
+      console.log("✅ Tracks fetched:", data.songs?.length || 0);
       setTracks(data.songs || []);
-    } catch (e) { console.error(e); }
+    } catch (e) {
+      console.error("❌ Error fetching tracks:", e);
+      setTracks([]);
+    }
   };
 
   const fetchMessages = async () => {
     if (!selectedUser) return;
     setLoadingMsgs(true);
     try {
-      const res  = await fetch(
-        `${BASE}/messages?sender=${encodeURIComponent(currentUserEmail)}&receiver=${encodeURIComponent(selectedUser.email)}`
+      const res = await fetch(
+        `${BASE}/messages?sender=${encodeURIComponent(
+          currentUserEmail
+        )}&receiver=${encodeURIComponent(selectedUser.email)}`,
+        { credentials: "include" }
       );
       const data = await res.json();
       const msgs = data.messages || [];
       setMessages(msgs);
       checkPending(msgs);
-    } catch (e) { console.error(e); }
-    finally { setLoadingMsgs(false); }
+    } catch (e) {
+      console.error("❌ Error fetching messages:", e);
+      setMessages([]);
+    } finally {
+      setLoadingMsgs(false);
+    }
   };
 
   const fetchMessagesSilent = async (partner) => {
     if (!partner) return;
     try {
-      const res  = await fetch(
-        `${BASE}/messages?sender=${encodeURIComponent(currentUserEmail)}&receiver=${encodeURIComponent(partner.email)}`
+      const res = await fetch(
+        `${BASE}/messages?sender=${encodeURIComponent(
+          currentUserEmail
+        )}&receiver=${encodeURIComponent(partner.email)}`,
+        { credentials: "include" }
       );
       const data = await res.json();
       const msgs = data.messages || [];
       setMessages(msgs);
       checkPending(msgs);
-    } catch (e) { console.error(e); }
+    } catch (e) {
+      console.error("❌ Silent fetch error:", e);
+    }
   };
 
   const checkPending = (msgs) => {
     const p = msgs.find(
-      (m) => m.type === "tune_request" && m.receiver === currentUserEmail && !m.isAccepted
+      (m) =>
+        m.type === "tune_request" &&
+        m.receiver === currentUserEmail &&
+        !m.isAccepted
     );
     if (p) setListenInvite((prev) => (prev?._id === p._id ? prev : p));
-    else   setListenInvite(null);
+    else setListenInvite(null);
   };
 
-  /* ─── actions ─── */
+  /* ─── Actions ─── */
   const sendMessage = async () => {
     if (!newMsg.trim() || !selectedUser) return;
     try {
-      await fetch(`${BASE}/messages/send`, {
+      const res = await fetch(`${BASE}/messages/send`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ sender: currentUserEmail, receiver: selectedUser.email, text: newMsg }),
+        credentials: "include",
+        body: JSON.stringify({
+          sender: currentUserEmail,
+          receiver: selectedUser.email,
+          text: newMsg,
+        }),
       });
-      setNewMsg("");
-      fetchMessagesSilent(selectedUser);
-    } catch (e) { console.error(e); }
+
+      if (res.ok) {
+        setNewMsg("");
+        fetchMessagesSilent(selectedUser);
+      } else {
+        console.error("Failed to send message");
+      }
+    } catch (e) {
+      console.error("❌ Send message error:", e);
+    }
   };
 
   const sendListenInvite = async () => {
     if (!selectedTrackId || !selectedUser) return;
     try {
-      await fetch(`${BASE}/messages/tune-request`, {
+      const res = await fetch(`${BASE}/messages/tune-request`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
+        credentials: "include",
         body: JSON.stringify({
-          sender: currentUserEmail, receiver: selectedUser.email,
-          trackId: selectedTrackId, text: "🎵 Listen together?",
+          sender: currentUserEmail,
+          receiver: selectedUser.email,
+          trackId: selectedTrackId,
+          text: "🎵 Listen together?",
         }),
       });
-      setShowListenModal(false);
-      setSelectedTrackId("");
-      fetchMessagesSilent(selectedUser);
-    } catch (e) { console.error(e); }
+
+      if (res.ok) {
+        setShowListenModal(false);
+        setSelectedTrackId("");
+        fetchMessagesSilent(selectedUser);
+      } else {
+        console.error("Failed to send invite");
+      }
+    } catch (e) {
+      console.error("❌ Send invite error:", e);
+    }
   };
 
   const acceptTuneRequest = async (messageId, msg) => {
     try {
-      await fetch(`${BASE}/messages/accept-tune`, {
+      const res = await fetch(`${BASE}/messages/accept-tune`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
+        credentials: "include",
         body: JSON.stringify({ messageId }),
       });
-      startSession(msg);
-      setListenInvite(null);
-      fetchMessagesSilent(selectedUser);
-    } catch (e) { console.error(e); }
+
+      if (res.ok) {
+        startSession(msg);
+        setListenInvite(null);
+        fetchMessagesSilent(selectedUser);
+      } else {
+        console.error("Failed to accept tune");
+      }
+    } catch (e) {
+      console.error("❌ Accept tune error:", e);
+    }
   };
 
   const startSession = (msg) => {
-    const track   = msg.track;
-    const partner = msg.sender === currentUserEmail ? msg.receiver : msg.sender;
+    const track = msg.track;
+    const partner =
+      msg.sender === currentUserEmail ? msg.receiver : msg.sender;
     setActiveSession({ track, with: partner });
     if (audioRef.current && track?.filename) {
       audioRef.current.src = `${BASE}/uploads/${track.filename}`;
       audioRef.current.load();
-      audioRef.current.play().then(() => setIsPlaying(true)).catch(console.error);
+      audioRef.current
+        .play()
+        .then(() => setIsPlaying(true))
+        .catch(console.error);
     }
   };
 
   const togglePlay = () => {
     if (!audioRef.current) return;
-    if (isPlaying) { audioRef.current.pause(); setIsPlaying(false); }
-    else           { audioRef.current.play();  setIsPlaying(true); }
+    if (isPlaying) {
+      audioRef.current.pause();
+      setIsPlaying(false);
+    } else {
+      audioRef.current.play();
+      setIsPlaying(true);
+    }
   };
 
   const handleSeek = (e) => {
@@ -235,10 +317,32 @@ useEffect(() => {
 
   const closeSession = () => {
     audioRef.current?.pause();
-    setActiveSession(null); setIsPlaying(false); setProgress(0);
+    setActiveSession(null);
+    setIsPlaying(false);
+    setProgress(0);
   };
 
-  /* ─── render ─── */
+  // Not logged in state
+  if (!currentUserEmail) {
+    return (
+      <>
+        <style>{CSS}</style>
+        <div className="msg-root">
+          <div className="no-chat" style={{ flex: 1 }}>
+            <div style={{ fontSize: 52 }}>🔒</div>
+            <p style={{ fontSize: 17, fontWeight: 700, color: "#475569", margin: 0 }}>
+              Please Login
+            </p>
+            <p style={{ fontSize: 13, color: "#334155", margin: 0 }}>
+              You need to be logged in to send messages
+            </p>
+          </div>
+        </div>
+      </>
+    );
+  }
+
+  /* ─── Render ─── */
   return (
     <>
       <style>{CSS}</style>
@@ -250,16 +354,17 @@ useEffect(() => {
       />
 
       <div className="msg-root">
-
         {/* ══ SIDEBAR ══ */}
         <aside className="msg-sidebar">
           <div className="sidebar-header">
             <span className="sidebar-logo">💬</span>
             <span className="sidebar-title">Messages</span>
-            <button className="refresh-btn" onClick={fetchUsers} title="Refresh">↻</button>
+            <button className="refresh-btn" onClick={fetchUsers} title="Refresh">
+              ↻
+            </button>
           </div>
 
-          {/* inline search — always visible */}
+          {/* Search */}
           <div className="sidebar-search">
             <input
               className="search-input"
@@ -270,14 +375,16 @@ useEffect(() => {
           </div>
 
           <div className="user-list">
-            {/* loading state */}
+            {/* Loading state */}
             {loadingUsers && (
               <div className="loading-wrap">
-                <div className="dot" /><div className="dot" /><div className="dot" />
+                <div className="dot" />
+                <div className="dot" />
+                <div className="dot" />
               </div>
             )}
 
-            {/* empty state */}
+            {/* Empty state */}
             {!loadingUsers && filteredUsers.length === 0 && (
               <div className="empty-state">
                 <span style={{ fontSize: 28 }}>👥</span>
@@ -285,23 +392,43 @@ useEffect(() => {
               </div>
             )}
 
-            {/* ✅ ALL users listed directly — click to open chat */}
-            {!loadingUsers && filteredUsers.map((u) => (
-              <div
-                key={u.email}
-                className={`user-item ${selectedUser?.email === u.email ? "active" : ""}`}
-                onClick={() => setSelectedUser(u)}
-              >
-                <div className="avatar">
-                  {u.name?.[0]?.toUpperCase() || u.email?.[0]?.toUpperCase() || "?"}
+            {/* User list */}
+            {!loadingUsers &&
+              filteredUsers.map((u) => (
+                <div
+                  key={u.email}
+                  className={`user-item ${
+                    selectedUser?.email === u.email ? "active" : ""
+                  }`}
+                  onClick={() => setSelectedUser(u)}
+                >
+                  <div className="avatar">
+                    {u.avatar ? (
+                      <img
+                        src={u.avatar}
+                        alt={u.name}
+                        style={{
+                          width: "100%",
+                          height: "100%",
+                          objectFit: "cover",
+                          borderRadius: "50%",
+                        }}
+                      />
+                    ) : (
+                      u.name?.[0]?.toUpperCase() ||
+                      u.email?.[0]?.toUpperCase() ||
+                      "?"
+                    )}
+                  </div>
+                  <div className="user-info">
+                    <span className="user-name">{u.name || "Unknown"}</span>
+                    <span className="user-email">{u.email}</span>
+                  </div>
+                  {selectedUser?.email === u.email && (
+                    <div className="active-pip" />
+                  )}
                 </div>
-                <div className="user-info">
-                  <span className="user-name">{u.name || "Unknown"}</span>
-                  <span className="user-email">{u.email}</span>
-                </div>
-                {selectedUser?.email === u.email && <div className="active-pip" />}
-              </div>
-            ))}
+              ))}
           </div>
 
           {!loadingUsers && (
@@ -312,36 +439,69 @@ useEffect(() => {
         </aside>
 
         {/* ══ CHAT ══ */}
-        <main className="msg-chat" style={{ paddingBottom: activeSession ? "72px" : 0 }}>
+        <main
+          className="msg-chat"
+          style={{ paddingBottom: activeSession ? "72px" : 0 }}
+        >
           {!selectedUser ? (
             <div className="no-chat">
               <div style={{ fontSize: 52 }}>🎵</div>
-              <p style={{ fontSize: 17, fontWeight: 700, color: "#475569", margin: 0 }}>
+              <p
+                style={{
+                  fontSize: 17,
+                  fontWeight: 700,
+                  color: "#475569",
+                  margin: 0,
+                }}
+              >
                 Pick someone to chat with
               </p>
               <p style={{ fontSize: 13, color: "#334155", margin: 0 }}>
                 {allUsers.length > 0
-                  ? `${allUsers.length} user${allUsers.length > 1 ? "s" : ""} in the sidebar`
+                  ? `${allUsers.length} user${
+                      allUsers.length > 1 ? "s" : ""
+                    } in the sidebar`
                   : "No other users yet"}
               </p>
             </div>
           ) : (
             <>
               <div className="chat-header">
-                <div className="avatar lg">{selectedUser.name?.[0]?.toUpperCase() || "?"}</div>
+                <div className="avatar lg">
+                  {selectedUser.avatar ? (
+                    <img
+                      src={selectedUser.avatar}
+                      alt={selectedUser.name}
+                      style={{
+                        width: "100%",
+                        height: "100%",
+                        objectFit: "cover",
+                        borderRadius: "50%",
+                      }}
+                    />
+                  ) : (
+                    selectedUser.name?.[0]?.toUpperCase() || "?"
+                  )}
+                </div>
                 <div>
                   <div className="chat-name">{selectedUser.name}</div>
                   <div className="chat-email">{selectedUser.email}</div>
                 </div>
-                <button className="listen-btn" onClick={() => setShowListenModal(true)}>
-                  <Waveform active={false} /><span>Listen Together</span>
+                <button
+                  className="listen-btn"
+                  onClick={() => setShowListenModal(true)}
+                >
+                  <Waveform active={false} />
+                  <span>Listen Together</span>
                 </button>
               </div>
 
               <div className="msg-list">
                 {loadingMsgs && <p className="empty-hint">Loading…</p>}
                 {!loadingMsgs && messages.length === 0 && (
-                  <div style={{ textAlign: "center", color: "#475569", padding: "40px 0" }}>
+                  <div
+                    style={{ textAlign: "center", color: "#475569", padding: "40px 0" }}
+                  >
                     <div style={{ fontSize: 32 }}>👋</div>
                     <p style={{ margin: "8px 0 0" }}>No messages yet. Say hi!</p>
                   </div>
@@ -349,13 +509,26 @@ useEffect(() => {
                 {messages.map((m) => {
                   const isMine = m.sender === currentUserEmail;
                   return (
-                    <div key={m._id} className={`bubble-wrap ${isMine ? "mine" : "theirs"}`}>
+                    <div
+                      key={m._id}
+                      className={`bubble-wrap ${isMine ? "mine" : "theirs"}`}
+                    >
                       {m.type === "tune_request" ? (
-                        <ListenCard msg={m} isMine={isMine} onAccept={() => acceptTuneRequest(m._id, m)} />
+                        <ListenCard
+                          msg={m}
+                          isMine={isMine}
+                          onAccept={() => acceptTuneRequest(m._id, m)}
+                        />
                       ) : (
-                        <div className={`bubble ${isMine ? "bubble-mine" : "bubble-theirs"}`}>
+                        <div
+                          className={`bubble ${
+                            isMine ? "bubble-mine" : "bubble-theirs"
+                          }`}
+                        >
                           <p>{m.text}</p>
-                          <span className="bubble-time">{timeAgo(m.createdAt)}</span>
+                          <span className="bubble-time">
+                            {timeAgo(m.createdAt)}
+                          </span>
                         </div>
                       )}
                     </div>
@@ -372,7 +545,9 @@ useEffect(() => {
                   onChange={(e) => setNewMsg(e.target.value)}
                   onKeyDown={(e) => e.key === "Enter" && sendMessage()}
                 />
-                <button className="send-btn" onClick={sendMessage}>Send ↑</button>
+                <button className="send-btn" onClick={sendMessage}>
+                  Send ↑
+                </button>
               </div>
             </>
           )}
@@ -383,15 +558,39 @@ useEffect(() => {
       {showListenModal && (
         <div className="overlay">
           <div className="modal">
-            <div className="modal-header"><Waveform active /><h3>Listen Together</h3></div>
-            <p className="modal-sub">Pick a track for <strong>{selectedUser?.name}</strong></p>
-            <select className="track-select" value={selectedTrackId} onChange={(e) => setSelectedTrackId(e.target.value)}>
+            <div className="modal-header">
+              <Waveform active />
+              <h3>Listen Together</h3>
+            </div>
+            <p className="modal-sub">
+              Pick a track for <strong>{selectedUser?.name}</strong>
+            </p>
+            <select
+              className="track-select"
+              value={selectedTrackId}
+              onChange={(e) => setSelectedTrackId(e.target.value)}
+            >
               <option value="">— Choose a track —</option>
-              {tracks.map((t) => <option key={t._id} value={t._id}>{t.title} · {t.originalName}</option>)}
+              {tracks.map((t) => (
+                <option key={t._id} value={t._id}>
+                  {t.title} · {t.artist || "Unknown Artist"}
+                </option>
+              ))}
             </select>
             <div className="modal-actions">
-              <button className="btn-cancel" onClick={() => setShowListenModal(false)}>Cancel</button>
-              <button className="btn-send" onClick={sendListenInvite} disabled={!selectedTrackId}>Send Invite 🎵</button>
+              <button
+                className="btn-cancel"
+                onClick={() => setShowListenModal(false)}
+              >
+                Cancel
+              </button>
+              <button
+                className="btn-send"
+                onClick={sendListenInvite}
+                disabled={!selectedTrackId}
+              >
+                Send Invite 🎵
+              </button>
             </div>
           </div>
         </div>
@@ -402,14 +601,33 @@ useEffect(() => {
         <div className="overlay">
           <div className="modal pulse-border">
             <div style={{ fontSize: 48, textAlign: "center" }}>🎧</div>
-            <h3 style={{ margin: 0, textAlign: "center", color: "#00f5c4" }}>Listen Together?</h3>
+            <h3
+              style={{ margin: 0, textAlign: "center", color: "#00f5c4" }}
+            >
+              Listen Together?
+            </h3>
             <p className="modal-sub" style={{ textAlign: "center" }}>
               <strong>{listenInvite.sender}</strong> wants to listen to
             </p>
-            <div className="invite-track"><Waveform active /><span>{listenInvite.track?.title || "a track"}</span></div>
+            <div className="invite-track">
+              <Waveform active />
+              <span>{listenInvite.track?.title || "a track"}</span>
+            </div>
             <div className="modal-actions">
-              <button className="btn-cancel" onClick={() => setListenInvite(null)}>Decline</button>
-              <button className="btn-send" onClick={() => acceptTuneRequest(listenInvite._id, listenInvite)}>Accept & Listen 🎵</button>
+              <button
+                className="btn-cancel"
+                onClick={() => setListenInvite(null)}
+              >
+                Decline
+              </button>
+              <button
+                className="btn-send"
+                onClick={() =>
+                  acceptTuneRequest(listenInvite._id, listenInvite)
+                }
+              >
+                Accept & Listen 🎵
+              </button>
             </div>
           </div>
         </div>
@@ -426,12 +644,23 @@ useEffect(() => {
             </div>
           </div>
           <div className="session-center">
-            <button className="sc-btn" onClick={togglePlay}>{isPlaying ? "⏸" : "▶"}</button>
+            <button className="sc-btn" onClick={togglePlay}>
+              {isPlaying ? "⏸" : "▶"}
+            </button>
             <span className="sc-time">{formatTime(progress)}</span>
-            <input type="range" className="sc-bar" min={0} max={duration || 0} value={progress} onChange={handleSeek} />
+            <input
+              type="range"
+              className="sc-bar"
+              min={0}
+              max={duration || 0}
+              value={progress}
+              onChange={handleSeek}
+            />
             <span className="sc-time">{formatTime(duration)}</span>
           </div>
-          <button className="session-close" onClick={closeSession}>✕ End Session</button>
+          <button className="session-close" onClick={closeSession}>
+            ✕ End Session
+          </button>
         </div>
       )}
     </>
@@ -450,7 +679,6 @@ const CSS = `
 
   .msg-root{display:flex;height:calc(100vh - 64px);background:#080c14;font-family:'Syne',sans-serif;color:#e2e8f0;overflow:hidden}
 
-  /* sidebar */
   .msg-sidebar{width:272px;min-width:220px;background:#0d1320;border-right:1px solid #1e293b;display:flex;flex-direction:column}
   .sidebar-header{padding:16px 14px;border-bottom:1px solid #1e293b;display:flex;align-items:center;gap:8px}
   .sidebar-logo{font-size:20px}
@@ -477,7 +705,7 @@ const CSS = `
   .user-item:hover{background:#111c2e}
   .user-item.active{background:#0f2340;border-left-color:#00f5c4}
 
-  .avatar{width:38px;height:38px;border-radius:50%;background:linear-gradient(135deg,#00f5c4,#3b82f6);display:flex;align-items:center;justify-content:center;font-weight:700;font-size:15px;color:#080c14;flex-shrink:0}
+  .avatar{width:38px;height:38px;border-radius:50%;background:linear-gradient(135deg,#00f5c4,#3b82f6);display:flex;align-items:center;justify-content:center;font-weight:700;font-size:15px;color:#080c14;flex-shrink:0;overflow:hidden}
   .avatar.lg{width:42px;height:42px;font-size:18px}
 
   .user-info{display:flex;flex-direction:column;min-width:0;flex:1}
@@ -488,7 +716,6 @@ const CSS = `
 
   .sidebar-footer{padding:10px 14px;border-top:1px solid #1e293b;font-size:11px;color:#334155;font-family:'DM Mono',monospace;text-align:center}
 
-  /* chat */
   .msg-chat{flex:1;display:flex;flex-direction:column;min-width:0}
   .no-chat{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px;text-align:center;padding:0 32px}
 
@@ -516,6 +743,7 @@ const CSS = `
   .lc-top{display:flex;align-items:center;gap:8px}
   .lc-label{font-size:11px;color:#00f5c4;font-weight:700;text-transform:uppercase;letter-spacing:.8px;font-family:'DM Mono',monospace}
   .lc-track{font-size:14px;font-weight:700;color:#e2e8f0;margin:0}
+  .lc-artist{font-size:12px;color:#94a3b8;margin:4px 0 0;font-style:italic}
   .lc-accept{padding:7px 14px;background:#00f5c4;color:#080c14;border:none;border-radius:20px;font-weight:700;cursor:pointer;font-family:'Syne',sans-serif;font-size:13px;transition:opacity .2s;align-self:flex-start}
   .lc-accept:hover{opacity:.85}
   .lc-sent{font-size:12px;color:#475569;font-family:'DM Mono',monospace}

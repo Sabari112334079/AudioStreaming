@@ -20,7 +20,38 @@ const storage = multer.diskStorage({
   },
 });
 
-const upload = multer({ storage });
+// ✅ New - proper mimetype check
+const fileFilter = (req, file, cb) => {
+  const allowedMimetypes = [
+    "audio/mpeg",      // .mp3
+    "audio/mp3",       // .mp3 (some browsers)
+    "audio/wav",       // .wav
+    "audio/wave",      // .wav
+    "audio/x-wav",     // .wav
+    "audio/ogg",       // .ogg
+    "audio/mp4",       // .m4a
+    "audio/x-m4a",     // .m4a
+    "audio/aac",       // .aac
+    "audio/flac",      // .flac
+  ];
+  const allowedExts = /\.(mp3|wav|ogg|m4a|aac|flac)$/i;
+
+  const extOk = allowedExts.test(path.extname(file.originalname));
+  const mimeOk = allowedMimetypes.includes(file.mimetype);
+
+  if (extOk || mimeOk) {
+    cb(null, true);
+  } else {
+    cb(new Error(`Unsupported file type: ${file.mimetype}`));
+  }
+};
+
+const upload = multer({
+  storage,
+  limits: { fileSize: 50 * 1024 * 1024 },
+  fileFilter,
+});
+
 
 // ---------------- Authentication Middleware ----------------
 const requireAuth = (req, res, next) => {
@@ -37,25 +68,44 @@ const login = async (req, res) => {
     const user = await User.findOne({ email });
     if (!user) return res.status(400).json({ message: "User not found" });
     if (user.password !== password) return res.status(400).json({ message: "Invalid password" });
-    
-    // Store user in session
+
+    user.lastActive = new Date();
+    await user.save();
+
     req.session.user = {
       email: user.email,
       name: user.name,
       _id: user._id,
-      mode: user.mode
+      mode: user.mode,
+      avatar: user.avatar,
+      verified: user.verified,
     };
-    
-    console.log("✅ User logged in:", req.session.user);
-    
-    res.json({ 
-      message: "Login successful", 
-      user: {
-        email: user.email,
-        name: user.name,
-        _id: user._id,
-        mode: user.mode
+
+    // ✅ ADD THIS — explicitly save session before responding
+    req.session.save((err) => {
+      if (err) {
+        console.error("Session save error:", err);
+        return res.status(500).json({ message: "Session error" });
       }
+      console.log("✅ Session saved:", req.session.id, req.session.user);
+      res.json({
+        message: "Login successful",
+        user: {
+          email: user.email,
+          name: user.name,
+          _id: user._id,
+          mode: user.mode,
+          avatar: user.avatar,
+          bio: user.bio,
+          location: user.location,
+          genre: user.genre,
+          verified: user.verified,
+          followers: user.followers,
+          following: user.following,
+          totalTracks: user.totalTracks,
+          createdAt: user.createdAt,
+        },
+      });
     });
   } catch (err) {
     console.error("Login error:", err);
@@ -65,12 +115,33 @@ const login = async (req, res) => {
 
 const register = async (req, res) => {
   try {
-    const { name, email, password } = req.body;
+    const { name, email, password, mode = "Listener", bio = "", location = "", genre = "" } = req.body;
+    
     const existingUser = await User.findOne({ email });
     if (existingUser) return res.status(400).json({ message: "User already exists" });
-    const newUser = new User({ name, email, password });
+    
+    const avatar = `https://ui-avatars.com/api/?name=${encodeURIComponent(name)}&background=random&size=200`;
+    
+    const newUser = new User({ 
+      name, 
+      email, 
+      password,
+      mode,
+      bio,
+      location,
+      genre,
+      avatar
+    });
+    
     await newUser.save();
-    res.status(201).json({ message: "User registered successfully" });
+    res.status(201).json({ 
+      message: "User registered successfully",
+      user: {
+        name: newUser.name,
+        email: newUser.email,
+        avatar: newUser.avatar
+      }
+    });
   } catch (err) {
     console.error("Register error:", err);
     res.status(500).json({ message: "Server error" });
@@ -91,7 +162,16 @@ const getCurrentUser = async (req, res) => {
   if (!req.session.user) {
     return res.status(401).json({ message: "Not authenticated" });
   }
-  res.json({ user: req.session.user });
+  
+  // Get fresh user data
+  try {
+    const user = await User.findOne({ email: req.session.user.email }).select("-password");
+    if (!user) return res.status(404).json({ message: "User not found" });
+    
+    res.json({ user });
+  } catch (err) {
+    res.status(500).json({ message: "Server error" });
+  }
 };
 
 const getProfile = async (req, res) => {
@@ -107,6 +187,39 @@ const getProfile = async (req, res) => {
   }
 };
 
+const updateProfile = async (req, res) => {
+  try {
+    const { email, name, bio, location, genre, mode } = req.body;
+    if (!email) return res.status(400).json({ message: "Email required" });
+    
+    const updateData = {};
+    if (name) updateData.name = name;
+    if (bio !== undefined) updateData.bio = bio;
+    if (location !== undefined) updateData.location = location;
+    if (genre !== undefined) updateData.genre = genre;
+    if (mode) updateData.mode = mode;
+    
+    const updatedUser = await User.findOneAndUpdate(
+      { email },
+      updateData,
+      { new: true }
+    ).select("-password");
+    
+    if (!updatedUser) return res.status(404).json({ message: "User not found" });
+    
+    // Update session
+    if (req.session.user && req.session.user.email === email) {
+      req.session.user.name = updatedUser.name;
+      req.session.user.mode = updatedUser.mode;
+    }
+    
+    res.json({ message: "Profile updated", user: updatedUser });
+  } catch (err) {
+    console.error("Update profile error:", err);
+    res.status(500).json({ message: "Server error" });
+  }
+};
+
 const updateMode = async (req, res) => {
   try {
     const { email, mode } = req.body;
@@ -115,8 +228,9 @@ const updateMode = async (req, res) => {
     const updatedUser = await User.findOneAndUpdate(
       { email },
       { mode: normalizedMode },
-      { new: true, returnDocument: "after" }
-    );
+      { new: true }
+    ).select("-password");
+    
     if (!updatedUser) return res.status(404).json({ message: "User not found" });
     
     // Update session
@@ -136,31 +250,55 @@ const uploadTrack = [
   upload.single("track"),
   async (req, res) => {
     try {
-      const { title, playlistId } = req.body;
+      const { 
+        title, 
+        description = "", 
+        genre = "Unknown", 
+        album = "",
+        releaseYear,
+        tags = ""
+      } = req.body;
+      
       const file = req.file;
+      if (!title || !file) {
+        return res.status(400).json({ message: "Title and audio file are required" });
+      }
 
-      if (!title || !file || !playlistId)
-        return res.status(400).json({ message: "Title, audio file, and playlistId are required" });
+      // Get artist info from session
+      const artistEmail = req.session?.user?.email || "unknown@email.com";
+      const artistName = req.session?.user?.name || "Unknown Artist";
+
+      // Parse tags
+      const tagArray = tags ? tags.split(',').map(t => t.trim()).filter(Boolean) : [];
 
       // Save track
       const newTrack = new Track({
         title,
+        description,
         filename: file.filename,
         originalName: file.originalname,
+        fileSize: file.size,
+        artist: artistName,
+        artistEmail,
+        genre,
+        album,
+        releaseYear: releaseYear ? parseInt(releaseYear) : null,
+        tags: tagArray,
         uploadedAt: new Date(),
       });
+      
       await newTrack.save();
 
-      // Add track to playlist
-      const playlist = await Playlist.findById(playlistId);
-      if (!playlist) return res.status(404).json({ message: "Playlist not found" });
+      // Update user's total tracks
+      await User.findOneAndUpdate(
+        { email: artistEmail },
+        { $inc: { totalTracks: 1 } }
+      );
 
-      playlist.tracks.push(newTrack._id);
-      await playlist.save();
-
-      // Populate tracks if needed and return
-      const updatedPlaylist = await Playlist.findById(playlistId).populate("tracks");
-      res.json({ message: "Track uploaded and added to playlist", track: newTrack, playlist: updatedPlaylist });
+      res.json({ 
+        message: "Track uploaded successfully", 
+        track: newTrack 
+      });
     } catch (err) {
       console.error("Upload track error:", err);
       res.status(500).json({ message: "Server error while uploading track" });
@@ -170,10 +308,67 @@ const uploadTrack = [
 
 const getAllSongs = async (req, res) => {
   try {
-    const songs = await Track.find().sort({ uploadedAt: -1 });
-    res.json({ songs });
+    const { genre, artist, search, limit = 50, skip = 0 } = req.query;
+    
+    let query = { isPublic: true };
+    
+    // Filters
+    if (genre && genre !== "all") query.genre = genre;
+    if (artist) query.artistEmail = artist;
+    if (search) {
+      query.$or = [
+        { title: { $regex: search, $options: 'i' } },
+        { artist: { $regex: search, $options: 'i' } },
+        { genre: { $regex: search, $options: 'i' } }
+      ];
+    }
+    
+    const songs = await Track.find(query)
+      .sort({ uploadedAt: -1 })
+      .limit(parseInt(limit))
+      .skip(parseInt(skip));
+      
+    const total = await Track.countDocuments(query);
+    
+    res.json({ songs, total, page: Math.floor(skip / limit) + 1 });
   } catch (err) {
     console.error("Get all songs error:", err);
+    res.status(500).json({ message: "Server error" });
+  }
+};
+
+const getTrackById = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const track = await Track.findById(id);
+    
+    if (!track) return res.status(404).json({ message: "Track not found" });
+    
+    // Increment plays
+    track.plays += 1;
+    await track.save();
+    
+    res.json({ track });
+  } catch (err) {
+    console.error("Get track error:", err);
+    res.status(500).json({ message: "Server error" });
+  }
+};
+
+const likeTrack = async (req, res) => {
+  try {
+    const { trackId } = req.body;
+    const track = await Track.findByIdAndUpdate(
+      trackId,
+      { $inc: { likes: 1 } },
+      { new: true }
+    );
+    
+    if (!track) return res.status(404).json({ message: "Track not found" });
+    
+    res.json({ message: "Track liked", likes: track.likes });
+  } catch (err) {
+    console.error("Like track error:", err);
     res.status(500).json({ message: "Server error" });
   }
 };
@@ -181,7 +376,12 @@ const getAllSongs = async (req, res) => {
 // ---------------- Playlist Controllers ----------------
 const addPlaylists = async (req, res) => {
   try {
-    const playlists = await Playlist.find()
+    const { userEmail } = req.query;
+    
+    let query = { isPublic: true };
+    if (userEmail) query.createdBy = userEmail;
+    
+    const playlists = await Playlist.find(query)
       .populate("tracks")
       .sort({ createdAt: -1 });
 
@@ -194,13 +394,22 @@ const addPlaylists = async (req, res) => {
 
 const createPlaylist = async (req, res) => {
   try {
-    const { title, description, coverUrl, trackIds } = req.body;
+    const { title, description = "", coverUrl, genre = "Mixed", isPublic = true } = req.body;
+    
+    if (!title) return res.status(400).json({ message: "Title is required" });
+    
+    const createdBy = req.session?.user?.email;
+    const createdByName = req.session?.user?.name || "Unknown";
 
     const newPlaylist = new Playlist({
       title,
       description,
-      coverUrl,
-      tracks: trackIds || [],
+      coverUrl: coverUrl || "https://picsum.photos/400/400",
+      createdBy,
+      createdByName,
+      genre,
+      isPublic,
+      tracks: [],
     });
 
     await newPlaylist.save();
@@ -224,6 +433,7 @@ const addTrackToPlaylist = async (req, res) => {
       return res.status(400).json({ message: "Track already in playlist" });
 
     playlist.tracks.push(trackId);
+    playlist.updatedAt = new Date();
     await playlist.save();
 
     const updated = await Playlist.findById(playlistId).populate("tracks");
@@ -352,18 +562,47 @@ const getAllUsers = async (req, res) => {
   try {
     const { email } = req.query;
     
-    // Build query - if email provided, exclude that user
     const query = email ? { email: { $ne: email } } : {};
     
-    const users = await User.find(query).select("name email");
+    const users = await User.find(query)
+      .select("name email avatar bio mode verified followers totalTracks")
+      .sort({ totalTracks: -1 });
     
     console.log("getAllUsers called, email param:", email);
-    console.log("Users found:", users);
+    console.log("Users found:", users.length);
     
     res.json({ users });
   } catch (err) {
     console.error("getAllUsers error:", err);
     res.status(500).json({ message: "Server error", error: err.message });
+  }
+};
+
+// Get user stats
+const getUserStats = async (req, res) => {
+  try {
+    const { email } = req.query;
+    if (!email) return res.status(400).json({ message: "Email required" });
+    
+    const user = await User.findOne({ email }).select("-password");
+    if (!user) return res.status(404).json({ message: "User not found" });
+    
+    const tracks = await Track.find({ artistEmail: email });
+    const totalPlays = tracks.reduce((sum, track) => sum + track.plays, 0);
+    const totalLikes = tracks.reduce((sum, track) => sum + track.likes, 0);
+    
+    res.json({
+      stats: {
+        totalTracks: user.totalTracks,
+        totalPlays,
+        totalLikes,
+        followers: user.followers,
+        following: user.following
+      }
+    });
+  } catch (err) {
+    console.error("Get user stats error:", err);
+    res.status(500).json({ message: "Server error" });
   }
 };
 
@@ -375,9 +614,12 @@ module.exports = {
   getCurrentUser,
   requireAuth,
   getProfile,
+  updateProfile,
   updateMode,
   uploadTrack,
   getAllSongs,
+  getTrackById,
+  likeTrack,
   addPlaylists,
   createPlaylist,
   addTrackToPlaylist,
@@ -386,5 +628,6 @@ module.exports = {
   sendMessage,
   sendTuneRequest,
   acceptTune,
-  getAllUsers
+  getAllUsers,
+  getUserStats
 };
