@@ -1,613 +1,1055 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState, useCallback } from "react";
 
-const HomePage = () => {
-  const [songs, setSongs] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [playingSongId, setPlayingSongId] = useState(null);
-  const [filter, setFilter] = useState({ genre: "all", search: "" });
-  const [genres, setGenres] = useState([]);
+// ─── Styles ───────────────────────────────────────────────────────────────────
+if (!document.querySelector("#hp2-styles")) {
+  const s = document.createElement("style");
+  s.id = "hp2-styles";
+  s.textContent = `
+    @import url('https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800;900&family=DM+Mono:wght@400;500&display=swap');
 
-  useEffect(() => {
-    fetchSongs();
-  }, [filter]);
+    :root {
+      --bg: #0a0a0f;
+      --surface: #111118;
+      --card: #16161f;
+      --card-hover: #1c1c28;
+      --border: rgba(255,255,255,0.07);
+      --accent: #7c3aed;
+      --accent2: #06b6d4;
+      --green: #22c55e;
+      --red: #f43f5e;
+      --text: #f1f5f9;
+      --muted: #64748b;
+      --subtle: #334155;
+    }
 
-  const fetchSongs = async () => {
-  try {
-    setLoading(true);
-    const queryParams = new URLSearchParams();
-    if (filter.genre !== "all") queryParams.append("genre", filter.genre);
-    if (filter.search) queryParams.append("search", filter.search);
-    
-    const res = await fetch(`http://localhost:5000/songs?${queryParams}`);
-    const data = await res.json();
-    
-    // ✅ Fixed: Check if data.songs exists and is an array
-    const songsArray = Array.isArray(data.songs) ? data.songs : [];
-    setSongs(songsArray);
-    
-    // Extract unique genres safely
-    const uniqueGenres = [...new Set(songsArray.map(s => s.genre))].filter(Boolean);
-    setGenres(["all", ...uniqueGenres]);
-  } catch (err) {
-    console.error("Error fetching songs:", err);
-    setSongs([]); // ✅ Set empty array on error
-    setGenres(["all"]);
-  } finally {
-    setLoading(false);
-  }
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    .hp-root {
+      min-height: 100vh;
+      background: var(--bg);
+      font-family: 'Outfit', sans-serif;
+      color: var(--text);
+      overflow-x: hidden;
+      padding-bottom: 110px;
+    }
+
+    /* ────────────────────────────────────────────────
+       HERO
+    ──────────────────────────────────────────────── */
+    .hp-hero {
+      position: relative;
+      padding: 56px 40px 48px;
+      overflow: hidden;
+      background: linear-gradient(180deg, #140826 0%, #0d0d18 60%, transparent 100%);
+    }
+    .hp-hero::before {
+      content: '';
+      position: absolute; top: -140px; left: -100px;
+      width: 600px; height: 600px;
+      background: radial-gradient(circle, rgba(124,58,237,0.22) 0%, transparent 65%);
+      pointer-events: none;
+    }
+    .hp-hero::after {
+      content: '';
+      position: absolute; top: -60px; right: -80px;
+      width: 480px; height: 480px;
+      background: radial-gradient(circle, rgba(6,182,212,0.12) 0%, transparent 65%);
+      pointer-events: none;
+    }
+    .hp-hero-inner { position: relative; z-index: 1; max-width: 1400px; margin: 0 auto; }
+    .hp-hero-eyebrow {
+      font-size: 11px; font-weight: 700;
+      letter-spacing: 2px; text-transform: uppercase;
+      color: var(--accent2); margin-bottom: 14px;
+      font-family: 'DM Mono', monospace;
+      display: flex; align-items: center; gap: 8px;
+    }
+    .hp-hero-eyebrow::before {
+      content: '';
+      display: inline-block; width: 24px; height: 2px;
+      background: var(--accent2);
+    }
+    .hp-hero-title {
+      font-size: clamp(36px, 5vw, 64px);
+      font-weight: 900;
+      letter-spacing: -2px;
+      line-height: 0.95;
+      margin-bottom: 18px;
+    }
+    .hp-hero-title span.grad {
+      background: linear-gradient(135deg, #fff 30%, #a78bfa 70%, #06b6d4 100%);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+    }
+    .hp-hero-title span.dim { color: rgba(255,255,255,0.18); }
+    .hp-hero-sub {
+      font-size: 15px; color: var(--muted); max-width: 480px; line-height: 1.6; margin-bottom: 32px;
+    }
+    .hp-hero-stats {
+      display: flex; gap: 32px; flex-wrap: wrap;
+    }
+    .hp-hero-stat-num {
+      font-size: 26px; font-weight: 800; letter-spacing: -1px;
+      background: linear-gradient(135deg, var(--accent), var(--accent2));
+      -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text;
+    }
+    .hp-hero-stat-lbl {
+      font-size: 11px; color: var(--muted); text-transform: uppercase;
+      letter-spacing: 0.7px; font-family: 'DM Mono', monospace; margin-top: 2px;
+    }
+
+    /* Search bar */
+    .hp-search-bar {
+      position: relative; max-width: 480px; margin-top: 32px;
+    }
+    .hp-search-bar input {
+      width: 100%;
+      padding: 13px 20px 13px 46px;
+      background: rgba(255,255,255,0.06);
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      color: var(--text);
+      font-family: 'Outfit', sans-serif;
+      font-size: 14px; outline: none;
+      transition: border-color 0.2s, background 0.2s, box-shadow 0.2s;
+    }
+    .hp-search-bar input:focus {
+      border-color: var(--accent);
+      background: rgba(124,58,237,0.07);
+      box-shadow: 0 0 0 3px rgba(124,58,237,0.1);
+    }
+    .hp-search-bar input::placeholder { color: var(--muted); }
+    .hp-search-icon {
+      position: absolute; left: 16px; top: 50%; transform: translateY(-50%);
+      font-size: 16px; pointer-events: none;
+    }
+
+    /* ────────────────────────────────────────────────
+       SECTION STRUCTURE
+    ──────────────────────────────────────────────── */
+    .hp-section { padding: 0 40px; margin-bottom: 48px; }
+    .hp-section-head {
+      display: flex; align-items: flex-end; justify-content: space-between;
+      margin-bottom: 20px; gap: 12px;
+    }
+    .hp-section-title {
+      font-size: 22px; font-weight: 800; letter-spacing: -0.5px;
+      color: var(--text); display: flex; align-items: center; gap: 10px;
+    }
+    .hp-section-title .icon {
+      width: 32px; height: 32px; border-radius: 8px;
+      background: linear-gradient(135deg, rgba(124,58,237,0.3), rgba(6,182,212,0.2));
+      border: 1px solid rgba(124,58,237,0.25);
+      display: flex; align-items: center; justify-content: center;
+      font-size: 15px;
+    }
+    .hp-section-meta { font-size: 12px; color: var(--muted); font-family: 'DM Mono', monospace; }
+    .hp-see-all {
+      font-size: 12px; font-weight: 600; color: var(--accent2);
+      background: none; border: none; cursor: pointer;
+      font-family: 'Outfit', sans-serif;
+      display: flex; align-items: center; gap: 4px;
+      transition: opacity 0.2s; white-space: nowrap; padding: 0;
+    }
+    .hp-see-all:hover { opacity: 0.7; }
+
+    /* Genre filter pills */
+    .hp-genres {
+      display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 20px;
+    }
+    .hp-genre-btn {
+      padding: 7px 16px; border-radius: 20px;
+      border: 1px solid var(--border);
+      background: rgba(255,255,255,0.03);
+      color: var(--muted);
+      font-family: 'Outfit', sans-serif;
+      font-size: 12px; font-weight: 500;
+      cursor: pointer; transition: all 0.2s; white-space: nowrap;
+    }
+    .hp-genre-btn:hover { border-color: var(--accent); color: var(--text); }
+    .hp-genre-btn.active { background: var(--accent); border-color: var(--accent); color: #fff; }
+
+    /* Horizontal scroll shelf */
+    .hp-shelf {
+      display: flex; gap: 16px;
+      overflow-x: auto; padding-bottom: 8px;
+      scrollbar-width: none;
+      scroll-snap-type: x mandatory;
+    }
+    .hp-shelf::-webkit-scrollbar { display: none; }
+    .hp-shelf > * { scroll-snap-align: start; flex-shrink: 0; }
+
+    /* ────────────────────────────────────────────────
+       SONG CARDS (horizontal shelf)
+    ──────────────────────────────────────────────── */
+    .hp-song-card {
+      width: 200px;
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      overflow: hidden;
+      cursor: pointer;
+      transition: transform 0.25s cubic-bezier(.34,1.56,.64,1), box-shadow 0.25s, border-color 0.2s;
+      animation: hpFadeUp 0.5s ease both;
+    }
+    .hp-song-card:hover {
+      transform: translateY(-5px);
+      box-shadow: 0 20px 50px rgba(0,0,0,0.55);
+      border-color: rgba(124,58,237,0.35);
+    }
+    .hp-song-card.active {
+      border-color: var(--accent);
+      box-shadow: 0 0 0 1px var(--accent), 0 16px 40px rgba(124,58,237,0.3);
+    }
+    .hp-song-thumb {
+      position: relative; width: 100%; aspect-ratio: 1; overflow: hidden;
+      background: linear-gradient(135deg, #1e1030 0%, #0f1a2e 100%);
+    }
+    .hp-song-thumb img { width: 100%; height: 100%; object-fit: cover; transition: transform 0.4s ease; display: block; }
+    .hp-song-card:hover .hp-song-thumb img { transform: scale(1.07); }
+    .hp-song-thumb-placeholder {
+      width: 100%; height: 100%;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 44px;
+    }
+    .hp-song-thumb-overlay {
+      position: absolute; inset: 0;
+      background: rgba(0,0,0,0.5);
+      display: flex; align-items: center; justify-content: center;
+      opacity: 0; transition: opacity 0.2s;
+    }
+    .hp-song-card:hover .hp-song-thumb-overlay,
+    .hp-song-card.active .hp-song-thumb-overlay { opacity: 1; }
+    .hp-play-circle {
+      width: 44px; height: 44px;
+      background: var(--accent); border: none; border-radius: 50%;
+      color: #fff; font-size: 18px;
+      display: flex; align-items: center; justify-content: center;
+      cursor: pointer; box-shadow: 0 6px 20px rgba(124,58,237,0.5);
+      transition: transform 0.2s;
+    }
+    .hp-play-circle:hover { transform: scale(1.1); }
+    .hp-eq-badge {
+      position: absolute; bottom: 8px; right: 8px;
+      display: flex; align-items: flex-end; gap: 2px; height: 16px;
+    }
+    .hp-eq-b {
+      width: 3px; background: var(--accent2); border-radius: 2px;
+      animation: hpEq 0.7s ease-in-out infinite alternate;
+    }
+    .hp-eq-b:nth-child(1) { animation-delay: 0s; }
+    .hp-eq-b:nth-child(2) { animation-delay: 0.15s; }
+    .hp-eq-b:nth-child(3) { animation-delay: 0.3s; }
+    .hp-song-info { padding: 12px 13px 13px; }
+    .hp-song-name {
+      font-size: 13px; font-weight: 700;
+      white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+      margin-bottom: 3px; color: var(--text);
+    }
+    .hp-song-artist { font-size: 11px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-bottom: 8px; }
+    .hp-song-meta { display: flex; align-items: center; justify-content: space-between; }
+    .hp-song-stats { font-size: 10px; color: var(--subtle); font-family: 'DM Mono', monospace; display: flex; gap: 8px; }
+    .hp-genre-pill {
+      font-size: 9px; font-weight: 700;
+      padding: 2px 7px; border-radius: 10px;
+      background: rgba(124,58,237,0.2); color: #a78bfa;
+      text-transform: uppercase; letter-spacing: 0.4px;
+    }
+
+    /* Mini progress inside active card */
+    .hp-song-progress {
+      padding: 0 13px 12px;
+      display: none;
+    }
+    .hp-song-card.active .hp-song-progress { display: block; }
+    .hp-prog-track {
+      height: 3px; background: rgba(255,255,255,0.1); border-radius: 99px;
+      overflow: hidden; cursor: pointer;
+    }
+    .hp-prog-fill {
+      height: 100%;
+      background: linear-gradient(90deg, var(--accent), var(--accent2));
+      border-radius: 99px; transition: width 0.1s linear;
+    }
+    .hp-prog-times { display: flex; justify-content: space-between; margin-top: 4px; }
+    .hp-prog-t { font-size: 9px; color: var(--muted); font-family: 'DM Mono', monospace; }
+
+    /* ────────────────────────────────────────────────
+       PLAYLIST CARDS (horizontal shelf)
+    ──────────────────────────────────────────────── */
+    .hp-pl-card {
+      width: 185px;
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 16px; overflow: hidden;
+      cursor: pointer;
+      transition: transform 0.25s cubic-bezier(.34,1.56,.64,1), box-shadow 0.25s, border-color 0.2s;
+      animation: hpFadeUp 0.5s ease both;
+    }
+    .hp-pl-card:hover {
+      transform: translateY(-5px);
+      box-shadow: 0 20px 50px rgba(0,0,0,0.5);
+      border-color: rgba(6,182,212,0.3);
+    }
+    .hp-pl-card.active-pl { border-color: var(--accent2); box-shadow: 0 0 0 1px var(--accent2), 0 16px 40px rgba(6,182,212,0.2); }
+    .hp-pl-thumb {
+      position: relative; width: 100%; aspect-ratio: 1;
+      overflow: hidden; background: linear-gradient(135deg, #0f1a2e, #1e1030);
+    }
+    .hp-pl-thumb img { width: 100%; height: 100%; object-fit: cover; transition: transform 0.4s; display: block; }
+    .hp-pl-card:hover .hp-pl-thumb img { transform: scale(1.06); }
+    .hp-pl-thumb-placeholder { width: 100%; height: 100%; display: flex; align-items: center; justify-content: center; font-size: 44px; }
+    .hp-pl-thumb-overlay {
+      position: absolute; inset: 0;
+      background: rgba(0,0,0,0.5);
+      display: flex; align-items: center; justify-content: center;
+      opacity: 0; transition: opacity 0.2s;
+    }
+    .hp-pl-card:hover .hp-pl-thumb-overlay,
+    .hp-pl-card.active-pl .hp-pl-thumb-overlay { opacity: 1; }
+    .hp-play-circle-teal {
+      width: 44px; height: 44px;
+      background: var(--accent2); border: none; border-radius: 50%;
+      color: #fff; font-size: 18px;
+      display: flex; align-items: center; justify-content: center;
+      cursor: pointer; box-shadow: 0 6px 20px rgba(6,182,212,0.4);
+      transition: transform 0.2s;
+    }
+    .hp-play-circle-teal:hover { transform: scale(1.1); }
+    .hp-pl-info { padding: 12px 13px 13px; }
+    .hp-pl-name { font-size: 13px; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-bottom: 3px; }
+    .hp-pl-count { font-size: 10px; color: var(--muted); font-family: 'DM Mono', monospace; }
+    .hp-pl-playing-badge {
+      position: absolute; bottom: 8px; left: 8px;
+      background: rgba(6,182,212,0.9); color: #0a0a0f;
+      font-size: 9px; font-weight: 800;
+      padding: 2px 8px; border-radius: 10px;
+      letter-spacing: 0.5px; text-transform: uppercase;
+    }
+
+    /* ────────────────────────────────────────────────
+       ARTIST CARDS (horizontal shelf)
+    ──────────────────────────────────────────────── */
+    .hp-artist-card {
+      width: 150px; text-align: center; cursor: pointer;
+      animation: hpFadeUp 0.5s ease both;
+      flex-shrink: 0;
+    }
+    .hp-artist-avatar-wrap { position: relative; display: inline-block; margin-bottom: 10px; }
+    .hp-artist-avatar {
+      width: 110px; height: 110px; border-radius: 50%;
+      background: linear-gradient(135deg, var(--accent), var(--accent2));
+      display: flex; align-items: center; justify-content: center;
+      font-size: 38px; font-weight: 800; color: #fff;
+      overflow: hidden;
+      border: 2px solid var(--border);
+      transition: transform 0.25s cubic-bezier(.34,1.56,.64,1), box-shadow 0.25s, border-color 0.2s;
+      margin: 0 auto;
+    }
+    .hp-artist-avatar img { width: 100%; height: 100%; object-fit: cover; }
+    .hp-artist-card:hover .hp-artist-avatar {
+      transform: scale(1.06);
+      box-shadow: 0 12px 36px rgba(124,58,237,0.4);
+      border-color: var(--accent);
+    }
+    .hp-artist-mode-dot {
+      position: absolute; bottom: 5px; right: 5px;
+      width: 22px; height: 22px; border-radius: 50%;
+      background: var(--card); border: 2px solid var(--border);
+      display: flex; align-items: center; justify-content: center;
+      font-size: 11px;
+    }
+    .hp-artist-name { font-size: 13px; font-weight: 700; color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; padding: 0 8px; }
+    .hp-artist-tracks { font-size: 10px; color: var(--muted); font-family: 'DM Mono', monospace; margin-top: 3px; }
+
+    /* ────────────────────────────────────────────────
+       FEATURED TRACK (big hero card)
+    ──────────────────────────────────────────────── */
+    .hp-featured {
+      margin: 0 40px 48px;
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 20px;
+      overflow: hidden;
+      display: flex;
+      min-height: 200px;
+      position: relative;
+      animation: hpFadeUp 0.5s ease both;
+    }
+    .hp-featured:hover { border-color: rgba(124,58,237,0.3); }
+    .hp-featured-art {
+      width: 220px; flex-shrink: 0;
+      background: linear-gradient(135deg, #1e1030, #0f1a2e);
+      position: relative; overflow: hidden;
+    }
+    .hp-featured-art img { width: 100%; height: 100%; object-fit: cover; }
+    .hp-featured-art-placeholder { width: 100%; height: 100%; display: flex; align-items: center; justify-content: center; font-size: 72px; }
+    .hp-featured-glow {
+      position: absolute; inset: 0;
+      background: linear-gradient(90deg, transparent 60%, var(--card) 100%);
+    }
+    .hp-featured-body { flex: 1; padding: 28px 32px;  flex-direction: column; justify-content: center; }
+    .hp-featured-tag {
+      font-size: 10px; font-weight: 700; letter-spacing: 1.5px; text-transform: uppercase;
+      color: var(--accent2); font-family: 'DM Mono', monospace; margin-bottom: 10px;
+      display: flex; align-items: center; gap: 6px;
+    }
+    .hp-featured-tag::before { content: ''; width: 16px; height: 2px; background: var(--accent2); display: inline-block; }
+    .hp-featured-title { font-size: 26px; font-weight: 800; letter-spacing: -0.5px; margin-bottom: 6px; }
+    .hp-featured-artist { font-size: 14px; color: var(--muted); margin-bottom: 16px; }
+    .hp-featured-stats { display: flex; gap: 20px; margin-bottom: 20px; }
+    .hp-featured-stat { font-size: 12px; color: var(--subtle); font-family: 'DM Mono', monospace; display: flex; align-items: center; gap: 4px; }
+    .hp-featured-play {
+      display: inline-flex; align-items: center; gap: 10px;
+      padding: 11px 22px;
+      background: linear-gradient(135deg, var(--accent), #6d28d9);
+      border: none; border-radius: 12px;
+      color: #fff; font-family: 'Outfit', sans-serif;
+      font-size: 14px; font-weight: 700; cursor: pointer;
+      transition: opacity 0.2s, transform 0.2s;
+      box-shadow: 0 4px 18px rgba(124,58,237,0.4);
+      align-self: flex-start;
+    }
+    .hp-featured-play:hover { opacity: 0.88; transform: translateY(-1px); }
+
+    /* ────────────────────────────────────────────────
+       NOW PLAYING BAR
+    ──────────────────────────────────────────────── */
+    .hp-np-bar {
+      position: fixed; bottom: 0; left: 0; right: 0;
+      height: 80px;
+      background: rgba(10,10,15,0.96);
+      backdrop-filter: blur(24px);
+      border-top: 1px solid var(--border);
+      display: flex; align-items: center;
+      padding: 0 28px; gap: 20px; z-index: 200;
+      box-shadow: 0 -8px 40px rgba(0,0,0,0.5);
+    }
+    .hp-np-cover {
+      width: 50px; height: 50px; border-radius: 10px;
+      object-fit: cover; flex-shrink: 0;
+      border: 1px solid var(--border);
+    }
+    .hp-np-cover-ph {
+      width: 50px; height: 50px; border-radius: 10px;
+      background: linear-gradient(135deg, var(--accent), var(--accent2));
+      display: flex; align-items: center; justify-content: center;
+      font-size: 22px; flex-shrink: 0;
+    }
+    .hp-np-info { min-width: 0; flex: 0 0 180px; }
+    .hp-np-title { font-size: 13px; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .hp-np-artist { font-size: 11px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-top: 2px; }
+    .hp-np-center {
+      flex: 1; display: flex; flex-direction: column; align-items: center; gap: 6px;
+      max-width: 520px; margin: 0 auto;
+    }
+    .hp-np-controls { display: flex; align-items: center; gap: 14px; }
+    .hp-np-btn {
+      background: none; border: none; color: var(--muted);
+      font-size: 18px; cursor: pointer; padding: 4px;
+      transition: color 0.15s;
+    }
+    .hp-np-btn:hover { color: var(--text); }
+    .hp-np-play {
+      width: 36px; height: 36px;
+      background: var(--text); border: none; border-radius: 50%;
+      color: var(--bg); font-size: 15px; cursor: pointer;
+      display: flex; align-items: center; justify-content: center;
+      transition: transform 0.15s, background 0.15s;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.4);
+    }
+    .hp-np-play:hover { transform: scale(1.08); background: #e2e8f0; }
+    .hp-np-prog-row { width: 100%; display: flex; align-items: center; gap: 10px; }
+    .hp-np-time { font-size: 10px; color: var(--muted); font-family: 'DM Mono', monospace; min-width: 30px; }
+    .hp-np-prog {
+      flex: 1; -webkit-appearance: none; height: 4px;
+      background: rgba(255,255,255,0.1); border-radius: 99px;
+      outline: none; cursor: pointer;
+    }
+    .hp-np-prog::-webkit-slider-thumb {
+      -webkit-appearance: none; width: 12px; height: 12px;
+      border-radius: 50%; background: var(--accent); cursor: pointer;
+    }
+    .hp-np-right { flex: 0 0 160px; display: flex; justify-content: flex-end; align-items: center; gap: 10px; }
+    .hp-np-vol {
+      width: 70px; -webkit-appearance: none; height: 3px;
+      background: rgba(255,255,255,0.1); border-radius: 99px; outline: none; cursor: pointer;
+    }
+    .hp-np-vol::-webkit-slider-thumb {
+      -webkit-appearance: none; width: 11px; height: 11px;
+      border-radius: 50%; background: var(--accent2); cursor: pointer;
+    }
+    .hp-np-close {
+      background: none; border: none; color: var(--muted);
+      font-size: 14px; cursor: pointer; padding: 4px;
+      transition: color 0.15s;
+    }
+    .hp-np-close:hover { color: var(--red); }
+
+    /* ────────────────────────────────────────────────
+       STATES
+    ──────────────────────────────────────────────── */
+    .hp-loading-spin {
+      width: 36px; height: 36px;
+      border: 3px solid rgba(124,58,237,0.2);
+      border-top-color: var(--accent); border-radius: 50%;
+      animation: hpSpin 0.8s linear infinite;
+    }
+    .hp-section-loading { display: flex; gap: 10px; align-items: center; padding: 20px 0; }
+    .hp-section-loading span { font-size: 13px; color: var(--muted); }
+    .hp-section-empty { font-size: 13px; color: var(--muted); padding: 20px 0; text-align: center; }
+
+    /* Divider */
+    .hp-divider {
+      margin: 0 40px 40px;
+      height: 1px; background: var(--border);
+    }
+
+    @keyframes hpFadeUp { from { opacity: 0; transform: translateY(18px); } to { opacity: 1; transform: translateY(0); } }
+    @keyframes hpSpin   { to { transform: rotate(360deg); } }
+    @keyframes hpEq     { from { transform: scaleY(0.3); } to { transform: scaleY(1.3); } }
+
+    @media (max-width: 640px) {
+      .hp-hero { padding: 36px 20px 32px; }
+      .hp-section { padding: 0 16px; }
+      .hp-featured { margin: 0 16px 36px; flex-direction: column; }
+      .hp-featured-art { width: 100%; height: 180px; }
+      .hp-divider { margin: 0 16px 32px; }
+    }
+  `;
+  document.head.appendChild(s);
+}
+
+// ─── Helpers ─────────────────────────────────────────────────────────────────
+const fmt = (s) => {
+  if (!s || isNaN(s) || !isFinite(s)) return "0:00";
+  return `${Math.floor(s / 60)}:${String(Math.floor(s % 60)).padStart(2, "0")}`;
 };
 
-  const handlePlay = (songId) => {
-    setPlayingSongId(songId);
+// ─── Per-card audio hook ──────────────────────────────────────────────────────
+const useCardAudio = (src) => {
+  const ref   = useRef(null);
+  const [playing,  setPlaying]  = useState(false);
+  const [current,  setCurrent]  = useState(0);
+  const [duration, setDuration] = useState(0);
+  const [volume,   setVolume]   = useState(0.8);
+
+  useEffect(() => {
+    const a = new Audio(src);
+    a.volume = volume; a.preload = "metadata";
+    ref.current = a;
+    a.addEventListener("loadedmetadata", () => setDuration(a.duration));
+    a.addEventListener("timeupdate",     () => setCurrent(a.currentTime));
+    a.addEventListener("ended",          () => setPlaying(false));
+    return () => { a.pause(); a.src = ""; };
+  }, [src]);
+
+  const toggle = useCallback(() => {
+    const a = ref.current; if (!a) return;
+    if (playing) { a.pause(); setPlaying(false); }
+    else         { a.play().catch(() => {}); setPlaying(true); }
+  }, [playing]);
+
+  const seek = useCallback((pct) => {
+    const a = ref.current; if (!a || !duration) return;
+    a.currentTime = pct * duration;
+  }, [duration]);
+
+  const pause = useCallback(() => { ref.current?.pause(); setPlaying(false); }, []);
+
+  return { playing, current, duration, volume, toggle, seek, pause, setVolume, ref };
+};
+
+// ─── SongCard ─────────────────────────────────────────────────────────────────
+const SongCard = ({ song, isActive, onActivate, onDeactivate, delay }) => {
+  const src    = `http://localhost:5000/uploads/audio/${song.filename}`;
+  const player = useCardAudio(src);
+  const pct    = player.duration ? (player.current / player.duration) * 100 : 0;
+
+  useEffect(() => { if (!isActive && player.playing) player.pause(); }, [isActive]);
+
+  const handleClick = () => {
+    if (isActive) { player.toggle(); }
+    else { onActivate(song._id, player); if (!player.playing) player.toggle(); }
   };
 
-  const handlePause = () => {
-    setPlayingSongId(null);
-  };
-
-  const handleLike = async (trackId) => {
-    try {
-      const res = await fetch("http://localhost:5000/tracks/like", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        credentials: "include",
-        body: JSON.stringify({ trackId })
-      });
-      
-      if (res.ok) {
-        // Update local state
-        setSongs(songs.map(song => 
-          song._id === trackId 
-            ? { ...song, likes: (song.likes || 0) + 1 }
-            : song
-        ));
-      }
-    } catch (err) {
-      console.error("Error liking track:", err);
-    }
-  };
-
-  if (loading) {
-    return (
-      <div style={styles.loadingContainer}>
-        <div style={styles.spinner}></div>
-        <p style={styles.loadingText}>Loading your music...</p>
-      </div>
-    );
-  }
+  const handleClose = (e) => { e.stopPropagation(); player.pause(); onDeactivate(); };
 
   return (
-    <div style={styles.container}>
-      {/* Hero Section */}
-      <div style={styles.hero}>
-        <h1 style={styles.heroTitle}>
-          <span style={styles.heroIcon}>🎧</span>
-          Discover Latest Tracks
-        </h1>
-        <p style={styles.heroSubtitle}>
-          Explore {songs.length} amazing {songs.length === 1 ? 'track' : 'tracks'} from our community
-        </p>
+    <div
+      className={`hp-song-card${isActive ? " active" : ""}`}
+      style={{ animationDelay: `${delay}s` }}
+      onClick={handleClick}
+    >
+      <div className="hp-song-thumb">
+        {song.coverArt
+          ? <img src={song.coverArt} alt={song.title} loading="lazy" />
+          : <div className="hp-song-thumb-placeholder">🎵</div>}
+        <div className="hp-song-thumb-overlay">
+          <button className="hp-play-circle" onClick={(e) => { e.stopPropagation(); handleClick(); }}>
+            {player.playing ? "⏸" : "▶"}
+          </button>
+        </div>
+        {player.playing && (
+          <div className="hp-eq-badge">
+            {[5,8,11,7].map((h,i) => <div key={i} className="hp-eq-b" style={{ height: `${h}px` }} />)}
+          </div>
+        )}
+        {isActive && (
+          <button
+            onClick={handleClose}
+            style={{ position: "absolute", top: 8, right: 8, width: 26, height: 26, borderRadius: "50%", background: "rgba(0,0,0,0.6)", border: "1px solid rgba(255,255,255,0.15)", color: "#fff", fontSize: 12, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 10 }}
+          >✕</button>
+        )}
+      </div>
+      <div className="hp-song-info">
+        <div className="hp-song-name" title={song.title}>{song.title}</div>
+        <div className="hp-song-artist">🎤 {song.artist || "Unknown"}</div>
+        <div className="hp-song-meta">
+          <div className="hp-song-stats">
+            <span>▶ {(song.plays || 0).toLocaleString()}</span>
+            <span>♥ {(song.likes || 0).toLocaleString()}</span>
+          </div>
+          {song.genre && <span className="hp-genre-pill">{song.genre}</span>}
+        </div>
+      </div>
+      <div className="hp-song-progress">
+        <div className="hp-prog-track" onClick={(e) => { e.stopPropagation(); const r = e.currentTarget.getBoundingClientRect(); player.seek((e.clientX - r.left) / r.width); }}>
+          <div className="hp-prog-fill" style={{ width: `${pct}%` }} />
+        </div>
+        <div className="hp-prog-times">
+          <span className="hp-prog-t">{fmt(player.current)}</span>
+          <span className="hp-prog-t">{fmt(player.duration)}</span>
+        </div>
+      </div>
+    </div>
+  );
+};
 
-        {/* Filters */}
-        <div style={styles.filterBar}>
-          {/* Search */}
-          <input
-            type="text"
-            placeholder="🔍 Search tracks, artists..."
-            style={styles.searchInput}
-            value={filter.search}
-            onChange={(e) => setFilter({ ...filter, search: e.target.value })}
-          />
+// ─── PlaylistCard ─────────────────────────────────────────────────────────────
+const PlaylistCard = ({ pl, isActive, onPlay, delay }) => (
+  <div className={`hp-pl-card${isActive ? " active-pl" : ""}`} style={{ animationDelay: `${delay}s` }}>
+    <div className="hp-pl-thumb">
+      {pl.coverUrl
+        ? <img src={pl.coverUrl} alt={pl.title} onError={e => { e.target.src = `https://picsum.photos/seed/${pl._id}/400/400`; }} loading="lazy" />
+        : <div className="hp-pl-thumb-placeholder">🎧</div>}
+      {isActive && <div className="hp-pl-playing-badge">▶ Playing</div>}
+      <div className="hp-pl-thumb-overlay">
+        <button className="hp-play-circle-teal" onClick={() => onPlay(pl)}>
+          {isActive ? "⏸" : "▶"}
+        </button>
+      </div>
+    </div>
+    <div className="hp-pl-info">
+      <div className="hp-pl-name">{pl.title}</div>
+      <div className="hp-pl-count">{pl.tracks?.length || 0} tracks</div>
+    </div>
+  </div>
+);
 
-          {/* Genre Filter */}
-          <select
-            style={styles.genreSelect}
-            value={filter.genre}
-            onChange={(e) => setFilter({ ...filter, genre: e.target.value })}
-          >
-            {genres.map(genre => (
-              <option key={genre} value={genre}>
-                {genre === "all" ? "All Genres" : genre}
-              </option>
+// ─── ArtistCard ───────────────────────────────────────────────────────────────
+const ArtistCard = ({ artist, delay }) => (
+  <div className="hp-artist-card" style={{ animationDelay: `${delay}s` }}>
+    <div className="hp-artist-avatar-wrap">
+      <div className="hp-artist-avatar">
+        {artist.avatar ? <img src={artist.avatar} alt={artist.name} /> : (artist.name?.charAt(0)?.toUpperCase() || "?")}
+      </div>
+      <div className="hp-artist-mode-dot">🎤</div>
+    </div>
+    <div className="hp-artist-name">{artist.name || "Unknown"}</div>
+    <div className="hp-artist-tracks">{artist.totalTracks || 0} tracks</div>
+  </div>
+);
+
+// ─── HomePage ─────────────────────────────────────────────────────────────────
+const HomePage = () => {
+  const [songs,     setSongs]     = useState([]);
+  const [playlists, setPlaylists] = useState([]);
+  const [artists,   setArtists]   = useState([]);
+  const [loading,   setLoading]   = useState({ songs: true, playlists: true, artists: true });
+  const [genres,    setGenres]    = useState(["all"]);
+  const [genre,     setGenre]     = useState("all");
+  const [search,    setSearch]    = useState("");
+  const [searchInput, setSearchInput] = useState("");
+  const searchTimer = useRef(null);
+
+  // Active song player
+  const [activeId,     setActiveId]     = useState(null);
+  const [activePlayer, setActivePlayer] = useState(null);
+
+  // Playlist player
+  const [activePl,         setActivePl]         = useState(null);
+  const [plTrackIdx,       setPlTrackIdx]        = useState(0);
+  const [plPlaying,        setPlPlaying]         = useState(false);
+  const [plProgress,       setPlProgress]        = useState(0);
+  const [plDuration,       setPlDuration]        = useState(0);
+  const [plVolume,         setPlVolume]          = useState(0.85);
+  const plAudioRef = useRef(null);
+
+  useEffect(() => { fetchSongs(); },      [genre, search]);
+  useEffect(() => { fetchPlaylists(); fetchArtists(); }, []);
+
+  // Playlist audio management
+  useEffect(() => {
+    if (!activePl) return;
+    const track = activePl.tracks[plTrackIdx];
+    if (!track || !plAudioRef.current) return;
+    plAudioRef.current.src = `http://localhost:5000/uploads/audio/${track.filename}`;
+    plAudioRef.current.load();
+    plAudioRef.current.play().then(() => setPlPlaying(true)).catch(() => setPlPlaying(false));
+  }, [plTrackIdx, activePl]);
+
+  const setLoad = (key, val) => setLoading(p => ({ ...p, [key]: val }));
+
+  const fetchSongs = async () => {
+    setLoad("songs", true);
+    try {
+      const q = new URLSearchParams();
+      if (genre !== "all") q.append("genre", genre);
+      if (search) q.append("search", search);
+      const res  = await fetch(`http://localhost:5000/songs?${q}`);
+      const data = await res.json();
+      const arr  = Array.isArray(data.songs) ? data.songs : [];
+      setSongs(arr);
+      const g = [...new Set(arr.map(s => s.genre))].filter(Boolean);
+      setGenres(["all", ...g]);
+    } catch { setSongs([]); }
+    finally { setLoad("songs", false); }
+  };
+
+  const fetchPlaylists = async () => {
+    setLoad("playlists", true);
+    try {
+      const res  = await fetch("http://localhost:5000/add-playlists", { credentials: "include" });
+      const data = await res.json();
+      setPlaylists(data.playlists || []);
+    } catch { setPlaylists([]); }
+    finally { setLoad("playlists", false); }
+  };
+
+  const fetchArtists = async () => {
+    setLoad("artists", true);
+    try {
+      const res  = await fetch("http://localhost:5000/users?role=Artist");
+      const data = await res.json();
+      // Support /users returning all users; filter to artists client-side
+      const all  = data.users || data || [];
+      setArtists(Array.isArray(all) ? all.filter(u => u.mode === "Artist" || u.role === "Artist") : []);
+    } catch { setArtists([]); }
+    finally { setLoad("artists", false); }
+  };
+
+  const handleSearchInput = (v) => {
+    setSearchInput(v);
+    clearTimeout(searchTimer.current);
+    searchTimer.current = setTimeout(() => setSearch(v), 420);
+  };
+
+  const handleActivateSong = (id, player) => {
+    if (activePlayer && activeId !== id) activePlayer.pause();
+    // Pause playlist if active
+    if (activePl) { plAudioRef.current?.pause(); setPlPlaying(false); }
+    setActiveId(id); setActivePlayer(player);
+  };
+  const handleDeactivateSong = () => { setActiveId(null); setActivePlayer(null); };
+
+  const handlePlayPlaylist = (pl) => {
+    // Pause song player
+    if (activePlayer) { activePlayer.pause(); setActiveId(null); setActivePlayer(null); }
+    if (activePl?._id === pl._id) {
+      if (plPlaying) { plAudioRef.current?.pause(); setPlPlaying(false); }
+      else { plAudioRef.current?.play().then(() => setPlPlaying(true)).catch(() => {}); }
+      return;
+    }
+    if (!pl.tracks?.length) return;
+    setActivePl(pl); setPlTrackIdx(0); setPlProgress(0); setPlDuration(0);
+  };
+  const closePlPlayer = () => {
+    plAudioRef.current?.pause();
+    setActivePl(null); setPlPlaying(false); setPlProgress(0); setPlDuration(0);
+  };
+
+  const featured = songs[0] || null;
+  const totalStats = { songs: songs.length, playlists: playlists.length, artists: artists.length };
+  const currentPlTrack = activePl?.tracks[plTrackIdx];
+
+  // Which NP bar to show: playlist takes priority
+  const showNP = activePl || activeId;
+  const npSong = songs.find(s => s._id === activeId);
+
+  return (
+    <div className="hp-root">
+      {/* Playlist audio element */}
+      <audio
+        ref={plAudioRef}
+        onTimeUpdate={() => plAudioRef.current && setPlProgress(plAudioRef.current.currentTime)}
+        onLoadedMetadata={() => plAudioRef.current && setPlDuration(plAudioRef.current.duration)}
+        onEnded={() => {
+          if (activePl && plTrackIdx < activePl.tracks.length - 1) setPlTrackIdx(i => i + 1);
+          else { setPlPlaying(false); setPlProgress(0); }
+        }}
+      />
+
+      {/* ── HERO ── */}
+      <div className="hp-hero">
+        <div className="hp-hero-inner">
+          <div className="hp-hero-eyebrow">Your Music Hub</div>
+          <h1 className="hp-hero-title">
+            <span className="grad">Feel Every</span><br/>
+            <span className="dim">Beat</span>
+          </h1>
+          <p className="hp-hero-sub">Discover tracks, explore playlists, and connect with artists from the community.</p>
+          <div className="hp-hero-stats">
+            {[
+              { n: totalStats.songs,     l: "Tracks" },
+              { n: totalStats.playlists, l: "Playlists" },
+              { n: totalStats.artists,   l: "Artists" },
+            ].map(({ n, l }) => (
+              <div key={l}>
+                <div className="hp-hero-stat-num">{n}</div>
+                <div className="hp-hero-stat-lbl">{l}</div>
+              </div>
             ))}
-          </select>
+          </div>
+          <div className="hp-search-bar">
+            <span className="hp-search-icon">🔍</span>
+            <input
+              type="text" placeholder="Search tracks, artists…"
+              value={searchInput} onChange={e => handleSearchInput(e.target.value)}
+            />
+          </div>
         </div>
       </div>
 
-      {/* Empty State */}
-      {!songs.length && !loading && (
-        <div style={styles.emptyState}>
-          <div style={styles.emptyIcon}>🎵</div>
-          <h2 style={styles.emptyTitle}>No Tracks Found</h2>
-          <p style={styles.emptyText}>
-            {filter.search || filter.genre !== "all" 
-              ? "Try adjusting your filters" 
-              : "Be the first to share some music!"}
-          </p>
+      {/* ── FEATURED TRACK ── */}
+      {featured && !loading.songs && (
+        <div className="hp-featured">
+          <div className="hp-featured-art">
+            {featured.coverArt
+              ? <img src={featured.coverArt} alt={featured.title} />
+              : <div className="hp-featured-art-placeholder">🎵</div>}
+            <div className="hp-featured-glow" />
+          </div>
+          <div className="hp-featured-body">
+            <div className="hp-featured-tag">Featured Track</div>
+            <div className="hp-featured-title">{featured.title}</div>
+            <div className="hp-featured-artist">🎤 {featured.artist || "Unknown Artist"}</div>
+            <div className="hp-featured-stats">
+              <span className="hp-featured-stat">▶ {(featured.plays || 0).toLocaleString()} plays</span>
+              <span className="hp-featured-stat">♥ {(featured.likes || 0).toLocaleString()}</span>
+              {featured.genre && <span className="hp-featured-stat">🎵 {featured.genre}</span>}
+            </div>
+            <button
+              className="hp-featured-play"
+              onClick={() => {
+                const card = document.querySelector(`[data-song-id="${featured._id}"]`);
+                handleActivateSong(featured._id, null);
+              }}
+            >
+              ▶ Play Now
+            </button>
+          </div>
         </div>
       )}
 
-      {/* Songs Grid */}
-      {songs.length > 0 && (
-        <div style={styles.grid}>
-          {songs.map((song, index) => (
-            <div 
-              key={song._id} 
-              style={{
-                ...styles.card,
-                animationDelay: `${index * 0.1}s`
-              }}
-            >
-              {/* Album Art */}
-              <div 
-                style={{
-                  ...styles.albumArt,
-                  backgroundImage: song.coverArt ? `url(${song.coverArt})` : 'none',
-                  backgroundSize: 'cover',
-                  backgroundPosition: 'center'
-                }}
-              >
-                {!song.coverArt && (
-                  <div style={styles.albumIcon}>
-                    {playingSongId === song._id ? "🎵" : "🎼"}
-                  </div>
-                )}
-                {playingSongId === song._id && (
-                  <div style={styles.playingIndicator}>
-                    <span style={styles.bar}></span>
-                    <span style={styles.bar}></span>
-                    <span style={styles.bar}></span>
-                  </div>
-                )}
-              </div>
+      <div className="hp-divider" />
 
-              {/* Song Info */}
-              <div style={styles.songInfo}>
-                <div style={styles.songHeader}>
-                  <h3 style={styles.songTitle}>{song.title}</h3>
-                  {song.genre && (
-                    <span style={styles.genreBadge}>{song.genre}</span>
-                  )}
-                </div>
-
-                <p style={styles.artistName}>
-                  <span style={styles.artistIcon}>🎤</span>
-                  {song.artist || "Unknown Artist"}
-                </p>
-
-                {song.description && (
-                  <p style={styles.songDescription}>{song.description}</p>
-                )}
-
-                {/* Stats Row */}
-                <div style={styles.statsRow}>
-                  <span style={styles.stat}>
-                    <span style={styles.statIcon}>▶️</span>
-                    {song.plays || 0} plays
-                  </span>
-                  <span style={styles.stat}>
-                    <span style={styles.statIcon}>❤️</span>
-                    {song.likes || 0} likes
-                  </span>
-                </div>
-
-                {/* Tags */}
-                {song.tags && song.tags.length > 0 && (
-                  <div style={styles.tagsContainer}>
-                    {song.tags.slice(0, 3).map((tag, i) => (
-                      <span key={i} style={styles.tag}>#{tag}</span>
-                    ))}
-                  </div>
-                )}
-
-                <p style={styles.uploadDate}>
-                  <span style={styles.dateIcon}>📅</span>
-                  {new Date(song.uploadedAt).toLocaleDateString('en-US', {
-                    month: 'short',
-                    day: 'numeric',
-                    year: 'numeric'
-                  })}
-                </p>
-              </div>
-
-              {/* Actions */}
-              <div style={styles.actionsBar}>
-                <button 
-                  style={styles.likeButton}
-                  onClick={() => handleLike(song._id)}
-                >
-                  ❤️ Like
-                </button>
-                <span style={styles.fileSize}>
-                  {song.fileSize ? `${(song.fileSize / (1024 * 1024)).toFixed(1)} MB` : ''}
-                </span>
-              </div>
-
-              {/* Audio Player */}
-              <div style={styles.playerWrapper}>
-                <audio 
-                  controls 
-                  style={styles.audioPlayer}
-                  onPlay={() => handlePlay(song._id)}
-                  onPause={handlePause}
-                >
-                  <source 
-                    src={`http://localhost:5000/uploads/${song.filename}`} 
-                    type="audio/mpeg" 
-                  />
-                  Your browser does not support the audio element.
-                </audio>
-              </div>
+      {/* ── LATEST SONGS ── */}
+      <div className="hp-section">
+        <div className="hp-section-head">
+          <div>
+            <div className="hp-section-title">
+              <span className="icon">🎵</span>
+              Latest Tracks
             </div>
+            <div className="hp-section-meta" style={{ marginTop: 4 }}>
+              {loading.songs ? "Loading…" : `${songs.length} track${songs.length !== 1 ? "s" : ""}`}
+            </div>
+          </div>
+        </div>
+
+        {/* Genre pills */}
+        <div className="hp-genres">
+          {genres.map(g => (
+            <button key={g} className={`hp-genre-btn${genre === g ? " active" : ""}`} onClick={() => setGenre(g)}>
+              {g === "all" ? "All Genres" : g}
+            </button>
           ))}
+        </div>
+
+        {loading.songs ? (
+          <div className="hp-section-loading"><div className="hp-loading-spin" /><span>Loading tracks…</span></div>
+        ) : songs.length === 0 ? (
+          <div className="hp-section-empty">No tracks found — try adjusting your filters.</div>
+        ) : (
+          <div className="hp-shelf">
+            {songs.map((song, i) => (
+              <SongCard
+                key={song._id}
+                song={song}
+                isActive={activeId === song._id}
+                onActivate={handleActivateSong}
+                onDeactivate={handleDeactivateSong}
+                delay={Math.min(i * 0.05, 0.4)}
+              />
+            ))}
+          </div>
+        )}
+      </div>
+
+      <div className="hp-divider" />
+
+      {/* ── PLAYLISTS ── */}
+      <div className="hp-section">
+        <div className="hp-section-head">
+          <div>
+            <div className="hp-section-title">
+              <span className="icon">🎧</span>
+              Playlists
+            </div>
+            <div className="hp-section-meta" style={{ marginTop: 4 }}>
+              {loading.playlists ? "Loading…" : `${playlists.length} playlist${playlists.length !== 1 ? "s" : ""}`}
+            </div>
+          </div>
+        </div>
+
+        {loading.playlists ? (
+          <div className="hp-section-loading"><div className="hp-loading-spin" /><span>Loading playlists…</span></div>
+        ) : playlists.length === 0 ? (
+          <div className="hp-section-empty">No playlists yet.</div>
+        ) : (
+          <div className="hp-shelf">
+            {playlists.map((pl, i) => (
+              <PlaylistCard
+                key={pl._id}
+                pl={pl}
+                isActive={activePl?._id === pl._id}
+                onPlay={handlePlayPlaylist}
+                delay={Math.min(i * 0.05, 0.4)}
+              />
+            ))}
+          </div>
+        )}
+      </div>
+
+      <div className="hp-divider" />
+
+      {/* ── ARTISTS ── */}
+      <div className="hp-section">
+        <div className="hp-section-head">
+          <div>
+            <div className="hp-section-title">
+              <span className="icon">🎤</span>
+              Artists
+            </div>
+            <div className="hp-section-meta" style={{ marginTop: 4 }}>
+              {loading.artists ? "Loading…" : `${artists.length} artist${artists.length !== 1 ? "s" : ""}`}
+            </div>
+          </div>
+        </div>
+
+        {loading.artists ? (
+          <div className="hp-section-loading"><div className="hp-loading-spin" /><span>Loading artists…</span></div>
+        ) : artists.length === 0 ? (
+          <div className="hp-section-empty">No artists found.</div>
+        ) : (
+          <div className="hp-shelf" style={{ gap: "24px", paddingTop: 4 }}>
+            {artists.map((a, i) => (
+              <ArtistCard key={a._id || a.email} artist={a} delay={Math.min(i * 0.05, 0.4)} />
+            ))}
+          </div>
+        )}
+      </div>
+
+      {/* ── NOW PLAYING BAR ── */}
+      {showNP && (
+        <div className="hp-np-bar">
+          {/* Left: cover + info */}
+          {activePl ? (
+            <>
+              {activePl.coverUrl
+                ? <img src={activePl.coverUrl} alt="cover" className="hp-np-cover" onError={e => { e.target.style.display = "none"; }} />
+                : <div className="hp-np-cover-ph">🎧</div>}
+              <div className="hp-np-info">
+                <div className="hp-np-title">{currentPlTrack?.title || "Unknown"}</div>
+                <div className="hp-np-artist">{activePl.title}</div>
+              </div>
+            </>
+          ) : npSong ? (
+            <>
+              {npSong.coverArt
+                ? <img src={npSong.coverArt} alt="cover" className="hp-np-cover" />
+                : <div className="hp-np-cover-ph">🎵</div>}
+              <div className="hp-np-info">
+                <div className="hp-np-title">{npSong.title}</div>
+                <div className="hp-np-artist">{npSong.artist || "Unknown"}</div>
+              </div>
+            </>
+          ) : null}
+
+          {/* Center: controls + progress */}
+          <div className="hp-np-center">
+            {activePl ? (
+              <>
+                <div className="hp-np-controls">
+                  <button className="hp-np-btn" onClick={() => plTrackIdx > 0 && setPlTrackIdx(i => i - 1)}>⏮</button>
+                  <button className="hp-np-play" onClick={() => {
+                    if (!plAudioRef.current) return;
+                    if (plPlaying) { plAudioRef.current.pause(); setPlPlaying(false); }
+                    else { plAudioRef.current.play().then(() => setPlPlaying(true)).catch(() => {}); }
+                  }}>{plPlaying ? "⏸" : "▶"}</button>
+                  <button className="hp-np-btn" onClick={() => activePl && plTrackIdx < activePl.tracks.length - 1 && setPlTrackIdx(i => i + 1)}>⏭</button>
+                </div>
+                <div className="hp-np-prog-row">
+                  <span className="hp-np-time">{fmt(plProgress)}</span>
+                  <input type="range" min={0} max={plDuration || 0} value={plProgress} onChange={e => {
+                    const v = parseFloat(e.target.value);
+                    if (plAudioRef.current) plAudioRef.current.currentTime = v;
+                    setPlProgress(v);
+                  }} className="hp-np-prog" />
+                  <span className="hp-np-time" style={{ textAlign: "right" }}>{fmt(plDuration)}</span>
+                </div>
+              </>
+            ) : activePlayer ? (
+              <>
+                <div className="hp-np-controls">
+                  <button className="hp-np-play" onClick={activePlayer.toggle}>
+                    {activePlayer.playing ? "⏸" : "▶"}
+                  </button>
+                </div>
+                <div className="hp-np-prog-row">
+                  <span className="hp-np-time">{fmt(activePlayer.current)}</span>
+                  <input type="range" min={0} max={1} step={0.001}
+                    value={activePlayer.duration ? activePlayer.current / activePlayer.duration : 0}
+                    onChange={e => activePlayer.seek(parseFloat(e.target.value))}
+                    className="hp-np-prog" />
+                  <span className="hp-np-time" style={{ textAlign: "right" }}>{fmt(activePlayer.duration)}</span>
+                </div>
+              </>
+            ) : null}
+          </div>
+
+          {/* Right: volume + close */}
+          <div className="hp-np-right">
+            <span style={{ fontSize: 13, color: "var(--muted)" }}>🔊</span>
+            <input type="range" min={0} max={1} step={0.01}
+              value={activePl ? plVolume : (activePlayer?.volume ?? 0.8)}
+              onChange={e => {
+                const v = parseFloat(e.target.value);
+                if (activePl && plAudioRef.current) { plAudioRef.current.volume = v; setPlVolume(v); }
+                else if (activePlayer) { activePlayer.setVolume(v); activePlayer.ref.current && (activePlayer.ref.current.volume = v); }
+              }}
+              className="hp-np-vol" />
+            <button className="hp-np-close" onClick={() => {
+              if (activePl) closePlPlayer();
+              else { activePlayer?.pause(); setActiveId(null); setActivePlayer(null); }
+            }}>✕</button>
+          </div>
         </div>
       )}
     </div>
   );
 };
-
-const styles = {
-  container: {
-    minHeight: "100vh",
-    background: "linear-gradient(135deg, #667eea 0%, #764ba2 100%)",
-    padding: "0",
-  },
-  
-  // Hero Section
-  hero: {
-    background: "rgba(255, 255, 255, 0.1)",
-    backdropFilter: "blur(10px)",
-    padding: "60px 20px 40px 20px",
-    textAlign: "center",
-    borderBottom: "1px solid rgba(255, 255, 255, 0.2)",
-  },
-  heroTitle: {
-    fontSize: "48px",
-    fontWeight: "800",
-    color: "white",
-    margin: "0 0 15px 0",
-    textShadow: "2px 2px 4px rgba(0,0,0,0.2)",
-    display: "flex",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: "15px",
-    flexWrap: "wrap",
-  },
-  heroIcon: {
-    fontSize: "52px",
-    animation: "bounce 2s infinite",
-  },
-  heroSubtitle: {
-    fontSize: "18px",
-    color: "rgba(255, 255, 255, 0.9)",
-    margin: "0 0 30px 0",
-    fontWeight: "400",
-  },
-
-  // Filter Bar
-  filterBar: {
-    display: "flex",
-    gap: "15px",
-    maxWidth: "600px",
-    margin: "0 auto",
-    flexWrap: "wrap",
-    justifyContent: "center",
-  },
-  searchInput: {
-    flex: "1",
-    minWidth: "250px",
-    padding: "12px 20px",
-    borderRadius: "25px",
-    border: "2px solid rgba(255, 255, 255, 0.3)",
-    background: "rgba(255, 255, 255, 0.9)",
-    fontSize: "14px",
-    outline: "none",
-    transition: "all 0.3s",
-  },
-  genreSelect: {
-    padding: "12px 20px",
-    borderRadius: "25px",
-    border: "2px solid rgba(255, 255, 255, 0.3)",
-    background: "rgba(255, 255, 255, 0.9)",
-    fontSize: "14px",
-    outline: "none",
-    cursor: "pointer",
-    minWidth: "150px",
-  },
-
-  // Grid
-  grid: {
-    display: "grid",
-    gridTemplateColumns: "repeat(auto-fill, minmax(320px, 1fr))",
-    gap: "30px",
-    padding: "40px 20px",
-    maxWidth: "1400px",
-    margin: "0 auto",
-  },
-
-  // Card
-  card: {
-    backgroundColor: "white",
-    borderRadius: "20px",
-    padding: "0",
-    boxShadow: "0 10px 30px rgba(0, 0, 0, 0.2)",
-    transition: "all 0.3s ease",
-    overflow: "hidden",
-    animation: "fadeInUp 0.6s ease forwards",
-    opacity: 0,
-  },
-
-  // Album Art
-  albumArt: {
-    background: "linear-gradient(135deg, #667eea 0%, #764ba2 100%)",
-    height: "200px",
-    display: "flex",
-    alignItems: "center",
-    justifyContent: "center",
-    position: "relative",
-    overflow: "hidden",
-  },
-  albumIcon: {
-    fontSize: "80px",
-    filter: "drop-shadow(0 4px 6px rgba(0,0,0,0.3))",
-  },
-
-  // Playing Indicator
-  playingIndicator: {
-    position: "absolute",
-    bottom: "15px",
-    right: "15px",
-    display: "flex",
-    gap: "4px",
-    alignItems: "flex-end",
-    height: "30px",
-  },
-  bar: {
-    width: "4px",
-    background: "white",
-    borderRadius: "2px",
-    animation: "wave 1s ease-in-out infinite",
-  },
-
-  // Song Info
-  songInfo: {
-    padding: "20px",
-  },
-  songHeader: {
-    display: "flex",
-    justifyContent: "space-between",
-    alignItems: "flex-start",
-    gap: "10px",
-    marginBottom: "8px",
-  },
-  songTitle: {
-    fontSize: "20px",
-    fontWeight: "700",
-    color: "#1f2937",
-    margin: "0",
-    flex: "1",
-    overflow: "hidden",
-    textOverflow: "ellipsis",
-    whiteSpace: "nowrap",
-  },
-  genreBadge: {
-    background: "linear-gradient(135deg, #667eea 0%, #764ba2 100%)",
-    color: "white",
-    padding: "4px 12px",
-    borderRadius: "12px",
-    fontSize: "11px",
-    fontWeight: "600",
-    textTransform: "uppercase",
-    letterSpacing: "0.5px",
-    flexShrink: 0,
-  },
-  artistName: {
-    fontSize: "14px",
-    color: "#6b7280",
-    margin: "0 0 8px 0",
-    display: "flex",
-    alignItems: "center",
-    gap: "6px",
-    fontWeight: "500",
-  },
-  artistIcon: {
-    fontSize: "14px",
-  },
-  songDescription: {
-    fontSize: "13px",
-    color: "#6b7280",
-    margin: "0 0 12px 0",
-    lineHeight: "1.5",
-    display: "-webkit-box",
-    WebkitLineClamp: "2",
-    WebkitBoxOrient: "vertical",
-    overflow: "hidden",
-  },
-
-  // Stats Row
-  statsRow: {
-    display: "flex",
-    gap: "15px",
-    marginBottom: "10px",
-  },
-  stat: {
-    fontSize: "12px",
-    color: "#9ca3af",
-    display: "flex",
-    alignItems: "center",
-    gap: "4px",
-  },
-  statIcon: {
-    fontSize: "12px",
-  },
-
-  // Tags
-  tagsContainer: {
-    display: "flex",
-    gap: "6px",
-    flexWrap: "wrap",
-    marginBottom: "10px",
-  },
-  tag: {
-    background: "#f3f4f6",
-    color: "#6b7280",
-    padding: "3px 10px",
-    borderRadius: "10px",
-    fontSize: "11px",
-    fontWeight: "500",
-  },
-
-  uploadDate: {
-    fontSize: "12px",
-    color: "#9ca3af",
-    display: "flex",
-    alignItems: "center",
-    gap: "6px",
-    margin: 0,
-  },
-  dateIcon: {
-    fontSize: "12px",
-  },
-
-  // Actions Bar
-  actionsBar: {
-    padding: "0 20px 15px 20px",
-    display: "flex",
-    justifyContent: "space-between",
-    alignItems: "center",
-  },
-  likeButton: {
-    background: "linear-gradient(135deg, #f093fb 0%, #f5576c 100%)",
-    color: "white",
-    border: "none",
-    padding: "8px 20px",
-    borderRadius: "20px",
-    fontSize: "13px",
-    fontWeight: "600",
-    cursor: "pointer",
-    transition: "transform 0.2s, box-shadow 0.2s",
-  },
-  fileSize: {
-    fontSize: "11px",
-    color: "#9ca3af",
-  },
-
-  // Player
-  playerWrapper: {
-    padding: "0 20px 20px 20px",
-  },
-  audioPlayer: {
-    width: "100%",
-    height: "40px",
-    borderRadius: "10px",
-    outline: "none",
-  },
-
-  // Loading State
-  loadingContainer: {
-    display: "flex",
-    flexDirection: "column",
-    alignItems: "center",
-    justifyContent: "center",
-    minHeight: "100vh",
-    background: "linear-gradient(135deg, #667eea 0%, #764ba2 100%)",
-  },
-  spinner: {
-    width: "60px",
-    height: "60px",
-    border: "6px solid rgba(255, 255, 255, 0.3)",
-    borderTop: "6px solid white",
-    borderRadius: "50%",
-    animation: "spin 1s linear infinite",
-  },
-  loadingText: {
-    color: "white",
-    fontSize: "18px",
-    marginTop: "20px",
-    fontWeight: "500",
-  },
-
-  // Empty State
-  emptyState: {
-    display: "flex",
-    flexDirection: "column",
-    alignItems: "center",
-    justifyContent: "center",
-    minHeight: "60vh",
-    padding: "40px 20px",
-  },
-  emptyIcon: {
-    fontSize: "120px",
-    marginBottom: "20px",
-    animation: "float 3s ease-in-out infinite",
-  },
-  emptyTitle: {
-    fontSize: "36px",
-    fontWeight: "700",
-    color: "white",
-    margin: "0 0 15px 0",
-    textShadow: "2px 2px 4px rgba(0,0,0,0.2)",
-  },
-  emptyText: {
-    fontSize: "18px",
-    color: "rgba(255, 255, 255, 0.9)",
-    margin: 0,
-  },
-};
-
-// Add CSS animations
-const styleSheet = document.createElement("style");
-styleSheet.textContent = `
-  @keyframes fadeInUp {
-    from {
-      opacity: 0;
-      transform: translateY(30px);
-    }
-    to {
-      opacity: 1;
-      transform: translateY(0);
-    }
-  }
-
-  @keyframes spin {
-    to { transform: rotate(360deg); }
-  }
-
-  @keyframes bounce {
-    0%, 100% { transform: translateY(0); }
-    50% { transform: translateY(-10px); }
-  }
-
-  @keyframes float {
-    0%, 100% { transform: translateY(0px); }
-    50% { transform: translateY(-20px); }
-  }
-
-  @keyframes wave {
-    0%, 100% { height: 10px; }
-    50% { height: 30px; }
-  }
-
-  .bar:nth-child(1) { animation-delay: 0s; }
-  .bar:nth-child(2) { animation-delay: 0.2s; }
-  .bar:nth-child(3) { animation-delay: 0.4s; }
-
-  div[style*="card"]:hover {
-    transform: translateY(-10px) !important;
-    box-shadow: 0 15px 40px rgba(0, 0, 0, 0.3) !important;
-  }
-
-  button[style*="likeButton"]:hover {
-    transform: scale(1.05);
-    box-shadow: 0 5px 15px rgba(245, 87, 108, 0.4);
-  }
-
-  input[style*="searchInput"]:focus,
-  select[style*="genreSelect"]:focus {
-    border-color: rgba(255, 255, 255, 0.8);
-    background: white;
-  }
-`;
-document.head.appendChild(styleSheet);
 
 export default HomePage;

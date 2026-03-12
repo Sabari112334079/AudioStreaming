@@ -1,17 +1,380 @@
 import { useEffect, useState } from "react";
 
+// ─── Styles ───────────────────────────────────────────────────────────────────
+if (!document.querySelector("#profile-styles")) {
+  const s = document.createElement("style");
+  s.id = "profile-styles";
+  s.textContent = `
+    @import url('https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800&family=DM+Mono:wght@400;500&display=swap');
+
+    :root {
+      --bg: #0a0a0f;
+      --surface: #111118;
+      --card: #16161f;
+      --card-hover: #1c1c28;
+      --border: rgba(255,255,255,0.07);
+      --accent: #7c3aed;
+      --accent2: #06b6d4;
+      --green: #22c55e;
+      --red: #f43f5e;
+      --text: #f1f5f9;
+      --muted: #64748b;
+      --subtle: #334155;
+    }
+
+    .pf-root {
+      min-height: calc(100vh - 64px);
+      background: var(--bg);
+      font-family: 'Outfit', sans-serif;
+      color: var(--text);
+      padding: 48px 24px 80px;
+      display: flex;
+      justify-content: center;
+      align-items: flex-start;
+      position: relative;
+      overflow: hidden;
+    }
+    .pf-root::before {
+      content: '';
+      position: absolute;
+      top: -160px; left: 50%;
+      transform: translateX(-50%);
+      width: 700px; height: 400px;
+      background: radial-gradient(ellipse, rgba(124,58,237,0.14) 0%, transparent 70%);
+      pointer-events: none;
+    }
+
+    .pf-wrap {
+      width: 100%;
+      max-width: 720px;
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+      position: relative;
+      z-index: 1;
+    }
+
+    /* ── Card shell ── */
+    .pf-card {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 20px;
+      overflow: hidden;
+      animation: pfFadeUp 0.5s ease both;
+    }
+
+    /* ── Hero header ── */
+    .pf-hero {
+      padding: 40px 36px;
+      background: linear-gradient(135deg, #1a0a2e 0%, #0f1a2e 100%);
+      display: flex;
+      align-items: center;
+      gap: 28px;
+      position: relative;
+      overflow: hidden;
+    }
+    .pf-hero::before {
+      content: '';
+      position: absolute;
+      top: -60px; right: -60px;
+      width: 280px; height: 280px;
+      background: radial-gradient(circle, rgba(124,58,237,0.22) 0%, transparent 70%);
+      pointer-events: none;
+    }
+    .pf-hero::after {
+      content: '';
+      position: absolute;
+      bottom: -40px; left: -40px;
+      width: 200px; height: 200px;
+      background: radial-gradient(circle, rgba(6,182,212,0.12) 0%, transparent 70%);
+      pointer-events: none;
+    }
+    .pf-avatar-wrap {
+      position: relative;
+      flex-shrink: 0;
+    }
+    .pf-avatar {
+      width: 96px; height: 96px;
+      border-radius: 50%;
+      background: linear-gradient(135deg, var(--accent), var(--accent2));
+      display: flex; align-items: center; justify-content: center;
+      font-size: 36px;
+      font-weight: 800;
+      color: #fff;
+      overflow: hidden;
+      box-shadow: 0 0 0 3px rgba(124,58,237,0.4), 0 0 32px rgba(124,58,237,0.25);
+    }
+    .pf-avatar img {
+      width: 100%; height: 100%;
+      object-fit: cover;
+    }
+    .pf-mode-ring {
+      position: absolute;
+      bottom: 2px; right: 2px;
+      width: 28px; height: 28px;
+      border-radius: 50%;
+      background: var(--card);
+      border: 2px solid var(--border);
+      display: flex; align-items: center; justify-content: center;
+      font-size: 13px;
+    }
+    .pf-hero-info { flex: 1; min-width: 0; }
+    .pf-hero-name {
+      font-size: 28px;
+      font-weight: 800;
+      letter-spacing: -0.5px;
+      line-height: 1;
+      margin-bottom: 6px;
+      background: linear-gradient(135deg, #fff 40%, #a78bfa);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+    }
+    .pf-hero-email {
+      font-size: 13px;
+      color: var(--muted);
+      font-family: 'DM Mono', monospace;
+      margin-bottom: 12px;
+    }
+    .pf-mode-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 5px 14px;
+      background: rgba(124,58,237,0.18);
+      border: 1px solid rgba(124,58,237,0.35);
+      border-radius: 20px;
+      font-size: 12px;
+      font-weight: 600;
+      color: #a78bfa;
+      letter-spacing: 0.3px;
+    }
+
+    /* ── Stats row ── */
+    .pf-stats {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      border-bottom: 1px solid var(--border);
+    }
+    .pf-stat-item {
+      padding: 20px 16px;
+      text-align: center;
+      border-right: 1px solid var(--border);
+      position: relative;
+      transition: background 0.2s;
+    }
+    .pf-stat-item:last-child { border-right: none; }
+    .pf-stat-item:hover { background: var(--card-hover); }
+    .pf-stat-num {
+      font-size: 26px;
+      font-weight: 800;
+      letter-spacing: -1px;
+      background: linear-gradient(135deg, var(--accent), var(--accent2));
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+      margin-bottom: 4px;
+    }
+    .pf-stat-lbl {
+      font-size: 11px;
+      color: var(--muted);
+      text-transform: uppercase;
+      letter-spacing: 0.8px;
+      font-family: 'DM Mono', monospace;
+    }
+
+    /* ── Section ── */
+    .pf-section {
+      padding: 28px 32px;
+      border-bottom: 1px solid var(--border);
+    }
+    .pf-section:last-child { border-bottom: none; }
+    .pf-section-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 22px;
+    }
+    .pf-section-title {
+      font-size: 15px;
+      font-weight: 700;
+      color: var(--text);
+      display: flex; align-items: center; gap: 8px;
+    }
+    .pf-section-title span {
+      font-size: 16px;
+    }
+
+    /* ── Info rows (view mode) ── */
+    .pf-info-grid {
+      display: flex;
+      flex-direction: column;
+      gap: 14px;
+    }
+    .pf-info-row {
+      display: flex;
+      align-items: flex-start;
+      gap: 14px;
+      padding: 12px 16px;
+      background: rgba(255,255,255,0.02);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      transition: background 0.2s;
+    }
+    .pf-info-row:hover { background: rgba(124,58,237,0.05); border-color: rgba(124,58,237,0.15); }
+    .pf-info-key {
+      font-size: 12px;
+      font-weight: 600;
+      color: var(--muted);
+      font-family: 'DM Mono', monospace;
+      min-width: 90px;
+      padding-top: 1px;
+    }
+    .pf-info-val {
+      font-size: 13px;
+      color: var(--text);
+      flex: 1;
+      line-height: 1.6;
+    }
+    .pf-empty-val { color: var(--subtle); font-style: italic; }
+
+    /* ── Edit form ── */
+    .pf-form {
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+    }
+    .pf-field {
+      display: flex;
+      flex-direction: column;
+      gap: 7px;
+    }
+    .pf-label {
+      font-size: 12px;
+      font-weight: 600;
+      color: var(--muted);
+      text-transform: uppercase;
+      letter-spacing: 0.6px;
+      font-family: 'DM Mono', monospace;
+    }
+    .pf-input, .pf-textarea {
+      padding: 11px 16px;
+      background: rgba(255,255,255,0.04);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      color: var(--text);
+      font-family: 'Outfit', sans-serif;
+      font-size: 14px;
+      outline: none;
+      transition: border-color 0.2s, background 0.2s, box-shadow 0.2s;
+    }
+    .pf-input:focus, .pf-textarea:focus {
+      border-color: var(--accent);
+      background: rgba(124,58,237,0.06);
+      box-shadow: 0 0 0 3px rgba(124,58,237,0.1);
+    }
+    .pf-textarea { resize: vertical; min-height: 80px; }
+
+    /* ── Buttons ── */
+    .pf-btn {
+      padding: 10px 20px;
+      border-radius: 10px;
+      font-family: 'Outfit', sans-serif;
+      font-size: 13px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.2s;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      border: none;
+    }
+    .pf-btn-ghost {
+      background: transparent;
+      border: 1px solid var(--border);
+      color: var(--muted);
+    }
+    .pf-btn-ghost:hover { border-color: var(--accent); color: #a78bfa; background: rgba(124,58,237,0.06); }
+    .pf-btn-primary {
+      background: linear-gradient(135deg, var(--accent), #6d28d9);
+      color: #fff;
+      box-shadow: 0 4px 16px rgba(124,58,237,0.3);
+    }
+    .pf-btn-primary:hover { transform: translateY(-1px); box-shadow: 0 6px 22px rgba(124,58,237,0.4); }
+    .pf-btn-primary:disabled { opacity: 0.5; cursor: not-allowed; transform: none; }
+    .pf-btn-danger {
+      background: rgba(244,63,94,0.1);
+      border: 1px solid rgba(244,63,94,0.3);
+      color: #f43f5e;
+    }
+    .pf-btn-danger:hover { background: rgba(244,63,94,0.18); border-color: #f43f5e; }
+
+    /* ── Mode toggle card ── */
+    .pf-mode-card {
+      display: flex;
+      align-items: center;
+      gap: 18px;
+      padding: 18px 20px;
+      background: rgba(255,255,255,0.02);
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      transition: all 0.2s;
+    }
+    .pf-mode-card:hover { border-color: rgba(124,58,237,0.25); background: rgba(124,58,237,0.04); }
+    .pf-mode-icon {
+      width: 48px; height: 48px;
+      border-radius: 12px;
+      background: linear-gradient(135deg, rgba(124,58,237,0.25), rgba(6,182,212,0.15));
+      border: 1px solid rgba(124,58,237,0.3);
+      display: flex; align-items: center; justify-content: center;
+      font-size: 22px;
+      flex-shrink: 0;
+    }
+    .pf-mode-text { flex: 1; min-width: 0; }
+    .pf-mode-name { font-size: 14px; font-weight: 700; margin-bottom: 3px; }
+    .pf-mode-desc { font-size: 12px; color: var(--muted); line-height: 1.5; }
+
+    /* ── Toast ── */
+    .pf-toast {
+      padding: 14px 20px;
+      border-radius: 12px;
+      font-size: 13px;
+      font-weight: 600;
+      text-align: center;
+      animation: pfFadeUp 0.3s ease;
+    }
+    .pf-toast.success { background: rgba(34,197,94,0.12); border: 1px solid rgba(34,197,94,0.3); color: #4ade80; }
+    .pf-toast.error   { background: rgba(244,63,94,0.12);  border: 1px solid rgba(244,63,94,0.3);  color: #fb7185; }
+
+    /* ── Locked state ── */
+    .pf-locked {
+      min-height: calc(100vh - 64px);
+      display: flex; align-items: center; justify-content: center;
+      flex-direction: column; gap: 14px; text-align: center;
+      background: var(--bg);
+      font-family: 'Outfit', sans-serif; color: var(--text);
+    }
+    .pf-locked-icon { font-size: 72px; opacity: 0.25; }
+    .pf-locked h2 { font-size: 22px; font-weight: 700; }
+    .pf-locked p  { font-size: 14px; color: var(--muted); }
+
+    @keyframes pfFadeUp {
+      from { opacity: 0; transform: translateY(16px); }
+      to   { opacity: 1; transform: translateY(0); }
+    }
+  `;
+  document.head.appendChild(s);
+}
+
+// ─── Profile ──────────────────────────────────────────────────────────────────
 const Profile = ({ setMode, currentUser }) => {
   const [user, setUser] = useState(currentUser);
   const [loading, setLoading] = useState(false);
   const [editing, setEditing] = useState(false);
   const [message, setMessage] = useState("");
-  
+
   const [formData, setFormData] = useState({
-    name: "",
-    bio: "",
-    location: "",
-    genre: "",
-    mode: "Listener"
+    name: "", bio: "", location: "", genre: "", mode: "Listener"
   });
 
   useEffect(() => {
@@ -27,48 +390,36 @@ const Profile = ({ setMode, currentUser }) => {
     }
   }, [currentUser]);
 
-  const handleChange = (e) => {
-    setFormData({
-      ...formData,
-      [e.target.name]: e.target.value
-    });
+  const flash = (msg) => {
+    setMessage(msg);
+    setTimeout(() => setMessage(""), 3500);
   };
+
+  const handleChange = (e) =>
+    setFormData({ ...formData, [e.target.name]: e.target.value });
 
   const handleUpdate = async () => {
     if (!user?.email) return;
-    
     setLoading(true);
-    setMessage("");
-
     try {
       const res = await fetch("http://localhost:5000/profile", {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         credentials: "include",
-        body: JSON.stringify({
-          email: user.email,
-          ...formData
-        })
+        body: JSON.stringify({ email: user.email, ...formData })
       });
-
       const data = await res.json();
-
       if (res.ok) {
         setUser(data.user);
         setMode(data.user.mode);
         setEditing(false);
-        setMessage("✅ Profile updated successfully!");
-        
-        // Update parent component's currentUser
-        if (window.location.reload) {
-          setTimeout(() => window.location.reload(), 1000);
-        }
+        flash("✓ Profile saved");
+        setTimeout(() => window.location.reload(), 900);
       } else {
-        setMessage("❌ " + data.message);
+        flash("✗ " + data.message);
       }
-    } catch (err) {
-      console.error("Update error:", err);
-      setMessage("❌ Server Error");
+    } catch {
+      flash("✗ Server error");
     } finally {
       setLoading(false);
     }
@@ -76,483 +427,164 @@ const Profile = ({ setMode, currentUser }) => {
 
   const toggleMode = async () => {
     const newMode = formData.mode === "Listener" ? "Artist" : "Listener";
-    
     setFormData({ ...formData, mode: newMode });
-    
     try {
       const res = await fetch("http://localhost:5000/update-mode", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         credentials: "include",
-        body: JSON.stringify({ 
-          email: user.email, 
-          mode: newMode 
-        })
+        body: JSON.stringify({ email: user.email, mode: newMode })
       });
-
       const data = await res.json();
-
       if (res.ok) {
         setUser(data.user);
         setMode(newMode);
-        setMessage(`✅ Switched to ${newMode} mode!`);
+        flash(`✓ Switched to ${newMode} mode`);
       }
-    } catch (err) {
-      console.error("Mode update error:", err);
-      setMessage("❌ Failed to update mode");
+    } catch {
+      flash("✗ Failed to update mode");
     }
   };
 
   if (!user) {
     return (
-      <div style={styles.container}>
-        <div style={styles.emptyState}>
-          <div style={styles.emptyIcon}>🔒</div>
-          <h2 style={styles.emptyTitle}>Please Login</h2>
-          <p style={styles.emptyText}>You need to be logged in to view your profile</p>
-        </div>
+      <div className="pf-locked">
+        <div className="pf-locked-icon">🔒</div>
+        <h2>Please log in</h2>
+        <p>You need to be logged in to view your profile</p>
       </div>
     );
   }
 
+  const isArtist = (user.mode || formData.mode) === "Artist";
+
   return (
-    <div style={styles.container}>
-      <div style={styles.profileCard}>
-        {/* Header */}
-        <div style={styles.header}>
-          <div style={styles.avatarLarge}>
-            {user.avatar ? (
-              <img src={user.avatar} alt="avatar" style={styles.avatarImg} />
-            ) : (
-              <span style={styles.avatarText}>
-                {user.name?.charAt(0)?.toUpperCase() || "?"}
-              </span>
-            )}
+    <div className="pf-root">
+      <div className="pf-wrap">
+
+        {/* ── Hero ── */}
+        <div className="pf-card" style={{ animationDelay: "0s" }}>
+          <div className="pf-hero">
+            <div className="pf-avatar-wrap">
+              <div className="pf-avatar">
+                {user.avatar
+                  ? <img src={user.avatar} alt="avatar" />
+                  : (user.name?.charAt(0)?.toUpperCase() || "?")}
+              </div>
+              <div className="pf-mode-ring">{isArtist ? "🎤" : "🎧"}</div>
+            </div>
+            <div className="pf-hero-info">
+              <div className="pf-hero-name">{user.name}</div>
+              <div className="pf-hero-email">{user.email}</div>
+              <div className="pf-mode-badge">
+                {isArtist ? "🎤 Artist" : "🎧 Listener"}
+              </div>
+            </div>
           </div>
-          <h2 style={styles.userName}>{user.name}</h2>
-          <p style={styles.userEmail}>{user.email}</p>
-          <div style={styles.modeBadge}>
-            {user.mode === "Artist" ? "🎤" : "🎧"} {user.mode}
+
+          {/* Stats */}
+          <div className="pf-stats">
+            {[
+              { n: user.totalTracks || 0, l: "Tracks" },
+              { n: user.followers || 0,   l: "Followers" },
+              { n: user.following || 0,   l: "Following" },
+            ].map(({ n, l }) => (
+              <div className="pf-stat-item" key={l}>
+                <div className="pf-stat-num">{n.toLocaleString()}</div>
+                <div className="pf-stat-lbl">{l}</div>
+              </div>
+            ))}
           </div>
         </div>
 
-        {/* Stats Section */}
-        <div style={styles.statsContainer}>
-          <div style={styles.statBox}>
-            <div style={styles.statNumber}>{user.totalTracks || 0}</div>
-            <div style={styles.statLabel}>Tracks</div>
-          </div>
-          <div style={styles.statBox}>
-            <div style={styles.statNumber}>{user.followers || 0}</div>
-            <div style={styles.statLabel}>Followers</div>
-          </div>
-          <div style={styles.statBox}>
-            <div style={styles.statNumber}>{user.following || 0}</div>
-            <div style={styles.statLabel}>Following</div>
-          </div>
-        </div>
-
-        {/* Profile Info */}
-        <div style={styles.infoSection}>
-          <div style={styles.sectionHeader}>
-            <h3 style={styles.sectionTitle}>Profile Information</h3>
-            <button 
-              style={styles.editBtn}
-              onClick={() => setEditing(!editing)}
-            >
-              {editing ? "Cancel" : "✏️ Edit"}
-            </button>
-          </div>
-
-          {editing ? (
-            // Edit Mode
-            <div style={styles.form}>
-              <div style={styles.inputGroup}>
-                <label style={styles.label}>Name</label>
-                <input
-                  type="text"
-                  name="name"
-                  value={formData.name}
-                  onChange={handleChange}
-                  style={styles.input}
-                />
-              </div>
-
-              <div style={styles.inputGroup}>
-                <label style={styles.label}>Bio</label>
-                <textarea
-                  name="bio"
-                  value={formData.bio}
-                  onChange={handleChange}
-                  style={styles.textarea}
-                  rows="3"
-                  placeholder="Tell us about yourself..."
-                />
-              </div>
-
-              <div style={styles.inputGroup}>
-                <label style={styles.label}>Location</label>
-                <input
-                  type="text"
-                  name="location"
-                  value={formData.location}
-                  onChange={handleChange}
-                  style={styles.input}
-                  placeholder="City, Country"
-                />
-              </div>
-
-              {formData.mode === "Artist" && (
-                <div style={styles.inputGroup}>
-                  <label style={styles.label}>Genre</label>
-                  <input
-                    type="text"
-                    name="genre"
-                    value={formData.genre}
-                    onChange={handleChange}
-                    style={styles.input}
-                    placeholder="e.g., Pop, Rock, Jazz"
-                  />
-                </div>
-              )}
-
-              <button 
-                style={styles.saveBtn}
-                onClick={handleUpdate}
-                disabled={loading}
+        {/* ── Profile Info ── */}
+        <div className="pf-card" style={{ animationDelay: "0.08s" }}>
+          <div className="pf-section">
+            <div className="pf-section-head">
+              <div className="pf-section-title"><span>👤</span> Profile Info</div>
+              <button
+                className="pf-btn pf-btn-ghost"
+                onClick={() => setEditing(!editing)}
               >
-                {loading ? "Saving..." : "💾 Save Changes"}
+                {editing ? "✕ Cancel" : "✏️ Edit"}
               </button>
             </div>
-          ) : (
-            // View Mode
-            <div style={styles.infoContent}>
-              <div style={styles.infoRow}>
-                <span style={styles.infoLabel}>📝 Bio:</span>
-                <span style={styles.infoValue}>
-                  {user.bio || "No bio yet"}
-                </span>
-              </div>
-              
-              <div style={styles.infoRow}>
-                <span style={styles.infoLabel}>📍 Location:</span>
-                <span style={styles.infoValue}>
-                  {user.location || "Not specified"}
-                </span>
-              </div>
-              
-              {user.mode === "Artist" && (
-                <div style={styles.infoRow}>
-                  <span style={styles.infoLabel}>🎵 Genre:</span>
-                  <span style={styles.infoValue}>
-                    {user.genre || "Not specified"}
-                  </span>
+
+            {editing ? (
+              <div className="pf-form">
+                {[
+                  { name: "name", label: "Display Name", type: "input" },
+                  { name: "bio",  label: "Bio",          type: "textarea" },
+                  { name: "location", label: "Location", type: "input", placeholder: "City, Country" },
+                  ...(isArtist ? [{ name: "genre", label: "Genre", type: "input", placeholder: "e.g. Lo-fi, Jazz, Indie" }] : [])
+                ].map(({ name, label, type, placeholder }) => (
+                  <div className="pf-field" key={name}>
+                    <label className="pf-label">{label}</label>
+                    {type === "textarea"
+                      ? <textarea className="pf-textarea" name={name} value={formData[name]} onChange={handleChange} placeholder="Tell us about yourself…" />
+                      : <input className="pf-input" type="text" name={name} value={formData[name]} onChange={handleChange} placeholder={placeholder} />
+                    }
+                  </div>
+                ))}
+                <div style={{ display: "flex", justifyContent: "flex-end", marginTop: 4 }}>
+                  <button className="pf-btn pf-btn-primary" onClick={handleUpdate} disabled={loading}>
+                    {loading ? "Saving…" : "💾 Save Changes"}
+                  </button>
                 </div>
-              )}
-              
-              <div style={styles.infoRow}>
-                <span style={styles.infoLabel}>📅 Member Since:</span>
-                <span style={styles.infoValue}>
-                  {new Date(user.createdAt).toLocaleDateString('en-US', {
-                    month: 'long',
-                    year: 'numeric'
-                  })}
-                </span>
               </div>
+            ) : (
+              <div className="pf-info-grid">
+                {[
+                  { key: "BIO",     val: user.bio      || null },
+                  { key: "LOCATION",val: user.location || null },
+                  ...(isArtist ? [{ key: "GENRE", val: user.genre || null }] : []),
+                  { key: "JOINED",  val: new Date(user.createdAt).toLocaleDateString("en-US", { month: "long", year: "numeric" }) },
+                ].map(({ key, val }) => (
+                  <div className="pf-info-row" key={key}>
+                    <span className="pf-info-key">{key}</span>
+                    <span className={`pf-info-val ${!val ? "pf-empty-val" : ""}`}>
+                      {val || "Not set"}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* ── Account Type ── */}
+        <div className="pf-card" style={{ animationDelay: "0.14s" }}>
+          <div className="pf-section">
+            <div className="pf-section-head">
+              <div className="pf-section-title"><span>⚡</span> Account Type</div>
             </div>
-          )}
+            <div className="pf-mode-card">
+              <div className="pf-mode-icon">{isArtist ? "🎤" : "🎧"}</div>
+              <div className="pf-mode-text">
+                <div className="pf-mode-name">{isArtist ? "Artist Mode" : "Listener Mode"}</div>
+                <div className="pf-mode-desc">
+                  {isArtist
+                    ? "You can upload & share tracks with the community"
+                    : "Switch to Artist to upload and share your music"}
+                </div>
+              </div>
+              <button className="pf-btn pf-btn-danger" onClick={toggleMode}>
+                Switch to {isArtist ? "Listener" : "Artist"}
+              </button>
+            </div>
+          </div>
         </div>
 
-        {/* Mode Toggle */}
-        <div style={styles.modeSection}>
-          <h3 style={styles.sectionTitle}>Account Type</h3>
-          <p style={styles.modeDescription}>
-            {user.mode === "Listener" 
-              ? "Switch to Artist mode to upload and share your music"
-              : "Switch to Listener mode to focus on discovering music"}
-          </p>
-          <button 
-            style={styles.toggleBtn}
-            onClick={toggleMode}
-          >
-            Switch to {user.mode === "Listener" ? "Artist" : "Listener"} Mode
-          </button>
-        </div>
-
-        {/* Message */}
+        {/* ── Toast ── */}
         {message && (
-          <div style={{
-            ...styles.message,
-            background: message.includes("✅") 
-              ? "linear-gradient(135deg, #10b981 0%, #059669 100%)"
-              : "linear-gradient(135deg, #ef4444 0%, #dc2626 100%)"
-          }}>
+          <div className={`pf-toast ${message.startsWith("✓") ? "success" : "error"}`}>
             {message}
           </div>
         )}
+
       </div>
     </div>
   );
 };
-
-const styles = {
-  container: {
-    minHeight: "calc(100vh - 64px)",
-    background: "linear-gradient(135deg, #667eea 0%, #764ba2 100%)",
-    padding: "40px 20px",
-    display: "flex",
-    justifyContent: "center",
-    alignItems: "flex-start",
-  },
-  profileCard: {
-    backgroundColor: "white",
-    borderRadius: "24px",
-    boxShadow: "0 20px 60px rgba(0,0,0,0.3)",
-    width: "100%",
-    maxWidth: "700px",
-    overflow: "hidden",
-  },
-  header: {
-    background: "linear-gradient(135deg, #667eea 0%, #764ba2 100%)",
-    padding: "40px 30px",
-    textAlign: "center",
-    color: "white",
-  },
-  avatarLarge: {
-    width: "120px",
-    height: "120px",
-    borderRadius: "50%",
-    background: "white",
-    margin: "0 auto 20px",
-    display: "flex",
-    alignItems: "center",
-    justifyContent: "center",
-    border: "4px solid rgba(255, 255, 255, 0.3)",
-    overflow: "hidden",
-  },
-  avatarImg: {
-    width: "100%",
-    height: "100%",
-    objectFit: "cover",
-  },
-  avatarText: {
-    fontSize: "48px",
-    fontWeight: "700",
-    color: "#667eea",
-  },
-  userName: {
-    margin: "0 0 8px 0",
-    fontSize: "28px",
-    fontWeight: "800",
-  },
-  userEmail: {
-    margin: "0 0 15px 0",
-    fontSize: "14px",
-    opacity: 0.9,
-  },
-  modeBadge: {
-    display: "inline-block",
-    background: "rgba(255, 255, 255, 0.2)",
-    backdropFilter: "blur(10px)",
-    padding: "8px 20px",
-    borderRadius: "20px",
-    fontSize: "14px",
-    fontWeight: "600",
-  },
-  statsContainer: {
-    display: "flex",
-    justifyContent: "space-around",
-    padding: "30px 20px",
-    borderBottom: "1px solid #e5e7eb",
-  },
-  statBox: {
-    textAlign: "center",
-  },
-  statNumber: {
-    fontSize: "28px",
-    fontWeight: "800",
-    color: "#667eea",
-    marginBottom: "5px",
-  },
-  statLabel: {
-    fontSize: "13px",
-    color: "#6b7280",
-    textTransform: "uppercase",
-    letterSpacing: "0.5px",
-  },
-  infoSection: {
-    padding: "30px",
-    borderBottom: "1px solid #e5e7eb",
-  },
-  sectionHeader: {
-    display: "flex",
-    justifyContent: "space-between",
-    alignItems: "center",
-    marginBottom: "20px",
-  },
-  sectionTitle: {
-    margin: 0,
-    fontSize: "18px",
-    fontWeight: "700",
-    color: "#1f2937",
-  },
-  editBtn: {
-    background: "transparent",
-    border: "2px solid #667eea",
-    color: "#667eea",
-    padding: "8px 16px",
-    borderRadius: "20px",
-    cursor: "pointer",
-    fontSize: "14px",
-    fontWeight: "600",
-    transition: "all 0.2s",
-  },
-  form: {
-    display: "flex",
-    flexDirection: "column",
-    gap: "18px",
-  },
-  inputGroup: {
-    display: "flex",
-    flexDirection: "column",
-    gap: "8px",
-  },
-  label: {
-    fontSize: "14px",
-    fontWeight: "600",
-    color: "#374151",
-  },
-  input: {
-    padding: "12px 16px",
-    fontSize: "15px",
-    borderRadius: "12px",
-    border: "2px solid #e5e7eb",
-    outline: "none",
-    transition: "all 0.2s",
-    fontFamily: "inherit",
-  },
-  textarea: {
-    padding: "12px 16px",
-    fontSize: "15px",
-    borderRadius: "12px",
-    border: "2px solid #e5e7eb",
-    outline: "none",
-    transition: "all 0.2s",
-    fontFamily: "inherit",
-    resize: "vertical",
-  },
-  saveBtn: {
-    padding: "14px",
-    background: "linear-gradient(135deg, #667eea 0%, #764ba2 100%)",
-    color: "white",
-    border: "none",
-    borderRadius: "12px",
-    cursor: "pointer",
-    fontSize: "16px",
-    fontWeight: "700",
-    marginTop: "10px",
-    transition: "transform 0.2s, box-shadow 0.2s",
-    boxShadow: "0 4px 15px rgba(102, 126, 234, 0.4)",
-  },
-  infoContent: {
-    display: "flex",
-    flexDirection: "column",
-    gap: "16px",
-  },
-  infoRow: {
-    display: "flex",
-    alignItems: "flex-start",
-    gap: "12px",
-  },
-  infoLabel: {
-    fontSize: "14px",
-    fontWeight: "600",
-    color: "#6b7280",
-    minWidth: "140px",
-  },
-  infoValue: {
-    fontSize: "14px",
-    color: "#1f2937",
-    flex: 1,
-    lineHeight: "1.6",
-  },
-  modeSection: {
-    padding: "30px",
-  },
-  modeDescription: {
-    fontSize: "14px",
-    color: "#6b7280",
-    marginBottom: "15px",
-    lineHeight: "1.6",
-  },
-  toggleBtn: {
-    padding: "12px 24px",
-    background: "linear-gradient(135deg, #f093fb 0%, #f5576c 100%)",
-    color: "white",
-    border: "none",
-    borderRadius: "20px",
-    cursor: "pointer",
-    fontSize: "15px",
-    fontWeight: "700",
-    transition: "transform 0.2s, box-shadow 0.2s",
-    boxShadow: "0 4px 15px rgba(245, 87, 108, 0.4)",
-  },
-  message: {
-    margin: "20px 30px 30px",
-    padding: "14px 20px",
-    color: "white",
-    borderRadius: "12px",
-    textAlign: "center",
-    fontSize: "14px",
-    fontWeight: "600",
-    boxShadow: "0 4px 15px rgba(0,0,0,0.1)",
-  },
-  emptyState: {
-    textAlign: "center",
-    padding: "60px 20px",
-  },
-  emptyIcon: {
-    fontSize: "80px",
-    marginBottom: "20px",
-  },
-  emptyTitle: {
-    fontSize: "28px",
-    fontWeight: "700",
-    color: "white",
-    margin: "0 0 15px 0",
-  },
-  emptyText: {
-    fontSize: "16px",
-    color: "rgba(255, 255, 255, 0.9)",
-    margin: 0,
-  },
-};
-
-// Hover effects
-const styleSheet = document.createElement("style");
-styleSheet.textContent = `
-  input:focus,
-  textarea:focus {
-    border-color: #667eea !important;
-    box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1) !important;
-  }
-  
-  button[style*="saveBtn"]:hover:not(:disabled),
-  button[style*="toggleBtn"]:hover {
-    transform: translateY(-2px);
-    box-shadow: 0 6px 20px rgba(102, 126, 234, 0.4) !important;
-  }
-  
-  button[style*="editBtn"]:hover {
-    background: #667eea !important;
-    color: white !important;
-  }
-  
-  button:disabled {
-    opacity: 0.6;
-    cursor: not-allowed;
-  }
-`;
-document.head.appendChild(styleSheet);
 
 export default Profile;

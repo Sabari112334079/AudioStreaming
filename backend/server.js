@@ -2,7 +2,7 @@ const express = require("express");
 const mongoose = require("mongoose");
 const cors = require("cors");
 const session = require("express-session");
-const MongoStore = require("connect-mongo"); // ✅ ADD THIS
+const MongoStore = require("connect-mongo").default; // ✅ ADD THIS
 const path = require("path");
 const fs = require("fs");
 const routes = require("./Routes");
@@ -19,9 +19,8 @@ if (!fs.existsSync(uploadDir)) {
 }
 
 // ✅ 2. CORS
-app.use(cors({
-  origin: "http://localhost:5173",
-  credentials: true,
+app.use(cors({ origin: "http://localhost:5173",
+  credentials: true
 }));
 
 // ✅ 3. Body parsers
@@ -33,22 +32,16 @@ mongoose.connect(MONGO_URI)
   .then(() => console.log("✅ MongoDB connected"))
   .catch((err) => console.error("❌ MongoDB error:", err));
 
-// ✅ 5. Session with MongoStore — survives server restarts + page refreshes
 app.use(session({
   secret: "your-secret-key-change-in-production",
   resave: false,
   saveUninitialized: false,
-  store: MongoStore.create({
-    mongoUrl: MONGO_URI,        // ✅ persists sessions in MongoDB
-    ttl: 7 * 24 * 60 * 60,     // 7 days in seconds
-    autoRemove: "native",       // auto-delete expired sessions
-    collectionName: "sessions", // stored in 'sessions' collection
-  }),
+store: MongoStore.create({ mongoUrl: MONGO_URI }),
   cookie: {
     secure: false,
-    httpOnly: true,
     sameSite: "lax",
-    maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days in ms
+    httpOnly: true,
+    maxAge: 7 * 24 * 60 * 60 * 1000,
   },
 }));
 

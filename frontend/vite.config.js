@@ -1,7 +1,14 @@
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
+import basicSsl from '@vitejs/plugin-basic-ssl'
 
-// https://vite.dev/config/
 export default defineConfig({
-  plugins: [react()],
+  plugins: [
+    react(),
+    basicSsl() // ✅ generates a self-signed cert automatically
+  ],
+  server: {
+    https: false,
+    port: 5173,
+  }
 })
