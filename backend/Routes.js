@@ -22,7 +22,9 @@ const {
   sendTuneRequest,
   acceptTune,
   getAllUsers,
-  getUserStats
+  getUserStats,
+  getArtistTracks,
+  deleteTrack
 } = require("./Controllers");
 
 // ========== Auth routes (public) ==========
@@ -37,6 +39,9 @@ router.put("/profile", requireAuth, updateProfile);
 router.post("/update-mode", requireAuth, updateMode);
 router.get("/user-stats", getUserStats);
 router.get("/users", requireAuth, getAllUsers);
+// Artist track management
+router.get("/artist/tracks", requireAuth, getArtistTracks);
+router.delete("/track", requireAuth, deleteTrack);
 
 // ========== Track routes ==========
 router.post("/upload-track", requireAuth, ...uploadTrack);

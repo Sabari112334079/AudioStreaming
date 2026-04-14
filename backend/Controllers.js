@@ -520,19 +520,30 @@ const acceptTune = async (req, res) => {
     res.status(500).json({ message: "Server error" });
   }
 };
-
 const getAllUsers = async (req, res) => {
   try {
-    const { email } = req.query;
-    const query = email ? { email: { $ne: email } } : {};
+    const { email, role } = req.query; // ✅ Added role parameter
+    
+    // Build query
+    const query = {};
+    
+    // Filter out current user if email provided
+    if (email) {
+      query.email = { $ne: email };
+    }
+    
+    // ✅ Filter by role/mode if specified
+    if (role === "Artist") {
+      query.mode = "Artist";
+    } else if (role === "Listener") {
+      query.mode = "Listener";
+    }
 
     const users = await User.find(query)
       .select("name email avatar bio mode verified followers totalTracks")
       .sort({ totalTracks: -1 });
 
-    console.log("getAllUsers called, email param:", email);
-    console.log("Users found:", users.length);
-
+    console.log(`getAllUsers: role=${role}, email=${email}, found ${users.length} users`);
     res.json({ users });
   } catch (err) {
     console.error("getAllUsers error:", err);
@@ -566,6 +577,84 @@ const getUserStats = async (req, res) => {
     res.status(500).json({ message: "Server error" });
   }
 };
+// ---------------- Artist Track Management ----------------
+// ---------------- Artist Track Management ----------------
+
+// GET: Fetch tracks uploaded by the logged-in artist
+const getArtistTracks = async (req, res) => {
+  try {
+    // ✅ Use session email - NEVER trust client-sent email for auth
+    const artistEmail = req.session?.user?.email;
+    
+    if (!artistEmail) {
+      return res.status(401).json({ success: false, message: "Authentication required" });
+    }
+
+    const tracks = await Track.find({ artistEmail })
+      .sort({ uploadedAt: -1 })
+      .select("title genre coverArt plays likes uploadedAt filename artist description");
+
+    res.json({ success: true, data: tracks });
+  } catch (err) {
+    console.error("Get artist tracks error:", err);
+    res.status(500).json({ success: false, message: "Server error fetching tracks" });
+  }
+};
+
+// DELETE: Remove a track (with file cleanup)
+const deleteTrack = async (req, res) => {
+  try {
+    const { trackId } = req.body;
+    const artistEmail = req.session?.user?.email; // ✅ From session, not body
+    
+    if (!trackId) {
+      return res.status(400).json({ success: false, message: "trackId required" });
+    }
+    if (!artistEmail) {
+      return res.status(401).json({ success: false, message: "Authentication required" });
+    }
+
+    // Find and verify ownership
+    const track = await Track.findById(trackId);
+    if (!track) {
+      return res.status(404).json({ success: false, message: "Track not found" });
+    }
+    if (track.artistEmail !== artistEmail) {
+      return res.status(403).json({ success: false, message: "Unauthorized: You can only delete your own tracks" });
+    }
+
+    // Delete physical audio file
+    const audioPath = path.join(AUDIO_DIR, track.filename);
+    if (fs.existsSync(audioPath)) {
+      fs.unlinkSync(audioPath);
+      console.log(`🗑️ Deleted audio: ${track.filename}`);
+    }
+
+    // Delete cover image if it's a local upload (not picsum)
+    if (track.coverArt && track.coverArt.includes("localhost:5000/uploads/covers")) {
+      const coverFilename = track.coverArt.split("/").pop();
+      const coverPath = path.join(COVERS_DIR, coverFilename);
+      if (fs.existsSync(coverPath)) {
+        fs.unlinkSync(coverPath);
+        console.log(`🗑️ Deleted cover: ${coverFilename}`);
+      }
+    }
+
+    // Remove from database
+    await Track.findByIdAndDelete(trackId);
+
+    // Update user stats
+    await User.findOneAndUpdate(
+      { email: artistEmail },
+      { $inc: { totalTracks: -1 } }
+    );
+
+    res.json({ success: true, message: "Track deleted successfully" });
+  } catch (err) {
+    console.error("Delete track error:", err);
+    res.status(500).json({ success: false, message: "Server error deleting track" });
+  }
+};
 
 // ---------------- Exports ----------------
 module.exports = {
@@ -591,4 +680,6 @@ module.exports = {
   acceptTune,
   getAllUsers,
   getUserStats,
+  getArtistTracks,
+  deleteTrack,
 };

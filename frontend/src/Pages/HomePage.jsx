@@ -728,17 +728,37 @@ const HomePage = () => {
     finally { setLoad("playlists", false); }
   };
 
-  const fetchArtists = async () => {
-    setLoad("artists", true);
-    try {
-      const res  = await fetch("http://localhost:5000/users?role=Artist");
-      const data = await res.json();
-      // Support /users returning all users; filter to artists client-side
-      const all  = data.users || data || [];
-      setArtists(Array.isArray(all) ? all.filter(u => u.mode === "Artist" || u.role === "Artist") : []);
-    } catch { setArtists([]); }
-    finally { setLoad("artists", false); }
-  };
+ const fetchArtists = async () => {
+  setLoad("artists", true);
+  try {
+    // ✅ Add credentials to send session cookie
+    const res = await fetch("http://localhost:5000/users?role=Artist", {
+      credentials: "include",  // ← THIS WAS MISSING!
+      headers: { "Content-Type": "application/json" },
+    });
+    
+    // ✅ Handle non-JSON responses safely
+    const contentType = res.headers.get("content-type");
+    if (!contentType?.includes("application/json")) {
+      throw new Error("Server returned non-JSON response");
+    }
+    
+    const data = await res.json();
+    
+    if (res.ok) {
+      const all = data.users || data || [];
+      setArtists(Array.isArray(all) ? all.filter(u => u.mode === "Artist") : []);
+    } else {
+      console.warn("Fetch artists failed:", data.message);
+      setArtists([]);
+    }
+  } catch (err) {
+    console.error("Failed to fetch artists:", err.message);
+    setArtists([]);
+  } finally {
+    setLoad("artists", false);
+  }
+};
 
   const handleSearchInput = (v) => {
     setSearchInput(v);

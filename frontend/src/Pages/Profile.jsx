@@ -372,6 +372,9 @@ const Profile = ({ setMode, currentUser }) => {
   const [loading, setLoading] = useState(false);
   const [editing, setEditing] = useState(false);
   const [message, setMessage] = useState("");
+const [tracks, setTracks]       = useState([]);
+const [tracksLoading, setTracksLoading] = useState(false);
+const [deleting, setDeleting]   = useState({});
 
   const [formData, setFormData] = useState({
     name: "", bio: "", location: "", genre: "", mode: "Listener"
@@ -394,7 +397,47 @@ const Profile = ({ setMode, currentUser }) => {
     setMessage(msg);
     setTimeout(() => setMessage(""), 3500);
   };
-
+useEffect(() => {
+  if (!user || (user.mode !== "Artist")) return;
+  const fetchTracks = async () => {
+    setTracksLoading(true);
+    try {
+      const res = await fetch("http://localhost:5000/artist/tracks", {
+        credentials: "include",
+      });
+      const data = await res.json();
+      if (res.ok) setTracks(data.data || []);
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setTracksLoading(false);
+    }
+  };
+  fetchTracks();
+}, [user]);
+const handleDeleteTrack = async (trackId) => {
+  if (!window.confirm("Delete this track permanently?")) return;
+  setDeleting((d) => ({ ...d, [trackId]: true }));
+  try {
+    const res = await fetch("http://localhost:5000/track", {
+      method: "DELETE",
+      headers: { "Content-Type": "application/json" },
+      credentials: "include",
+      body: JSON.stringify({ trackId }),
+    });
+    const data = await res.json();
+    if (res.ok) {
+      setTracks((t) => t.filter((tr) => tr._id !== trackId));
+      flash("✓ Track deleted");
+    } else {
+      flash("✗ " + data.message);
+    }
+  } catch {
+    flash("✗ Failed to delete");
+  } finally {
+    setDeleting((d) => ({ ...d, [trackId]: false }));
+  }
+};
   const handleChange = (e) =>
     setFormData({ ...formData, [e.target.name]: e.target.value });
 
@@ -509,7 +552,80 @@ const Profile = ({ setMode, currentUser }) => {
                 {editing ? "✕ Cancel" : "✏️ Edit"}
               </button>
             </div>
+{/* ── My Tracks ── */}
+{isArtist && (
+  <div className="pf-card" style={{ animationDelay: "0.2s" }}>
+    <div className="pf-section">
+      <div className="pf-section-head">
+        <div className="pf-section-title"><span>🎵</span> My Tracks</div>
+        <span style={{ fontSize: 12, color: "var(--muted)", fontFamily: "'DM Mono',monospace" }}>
+          {tracks.length} track{tracks.length !== 1 ? "s" : ""}
+        </span>
+      </div>
 
+      {tracksLoading ? (
+        <div style={{ color: "var(--muted)", fontSize: 13, textAlign: "center", padding: "20px 0" }}>
+          Loading tracks…
+        </div>
+      ) : tracks.length === 0 ? (
+        <div style={{ color: "var(--muted)", fontSize: 13, textAlign: "center", padding: "20px 0" }}>
+          No tracks uploaded yet.
+        </div>
+      ) : (
+        <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+          {tracks.map((track) => (
+            <div key={track._id} style={{
+              display: "flex", alignItems: "center", gap: 14,
+              padding: "12px 16px",
+              background: "rgba(255,255,255,0.02)",
+              border: "1px solid var(--border)",
+              borderRadius: 12,
+              transition: "background 0.2s",
+            }}>
+              {/* Cover */}
+              <div style={{
+                width: 44, height: 44, borderRadius: 8, flexShrink: 0,
+                background: "linear-gradient(135deg, rgba(124,58,237,0.3), rgba(6,182,212,0.2))",
+                display: "flex", alignItems: "center", justifyContent: "center",
+                fontSize: 18, overflow: "hidden",
+              }}>
+                {track.coverImage
+                  ? <img src={track.coverImage} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+                  : "🎵"}
+              </div>
+
+              {/* Info */}
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ fontSize: 14, fontWeight: 600, color: "var(--text)", 
+                  whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+                  {track.title}
+                </div>
+                <div style={{ fontSize: 11, color: "var(--muted)", fontFamily: "'DM Mono',monospace", marginTop: 2 }}>
+                  {track.genre || "Unknown genre"} · {new Date(track.createdAt).toLocaleDateString()}
+                </div>
+              </div>
+
+              {/* Likes */}
+              <div style={{ fontSize: 12, color: "var(--muted)", display: "flex", alignItems: "center", gap: 4 }}>
+                ❤️ {track.likes?.length || 0}
+              </div>
+
+              {/* Delete */}
+              <button
+                className="pf-btn pf-btn-danger"
+                style={{ padding: "6px 14px", fontSize: 12 }}
+                onClick={() => handleDeleteTrack(track._id)}
+                disabled={deleting[track._id]}
+              >
+                {deleting[track._id] ? "…" : "🗑 Delete"}
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  </div>
+)}
             {editing ? (
               <div className="pf-form">
                 {[
